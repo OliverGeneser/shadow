@@ -17,18 +17,20 @@
     "dev:start": "fastify start --ignore-watch=.ts$ -w -l info -P dist/app.js"
   },
   "dependencies": {
-    "fastify": "^5.0.0",
-    "fastify-plugin": "^5.0.0",
     "@fastify/autoload": "^6.0.0",
     "@fastify/sensible": "^6.0.0",
-    "fastify-cli": "^7.3.0"
+    "@fastify/websocket": "^11.0.2",
+    "fastify": "^5.0.0",
+    "fastify-cli": "^7.3.0",
+    "fastify-plugin": "^5.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.1.0",
+    "@types/ws": "^8.5.14",
     "c8": "^10.1.2",
-    "ts-node": "^10.4.0",
     "concurrently": "^9.0.0",
     "fastify-tsconfig": "^2.0.0",
+    "ts-node": "^10.4.0",
     "typescript": "~5.6.3"
   },
   "packageManager": "pnpm@10.3.0+sha512.ee592eda8815a8a293c206bb0917c4bb0ff274c50def7cbc17be05ec641fc2d1b02490ce660061356bd0d126a4d7eb2ec8830e6959fb8a447571c631d5a2442d"
