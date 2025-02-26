@@ -11,6 +11,8 @@ import {
   WebSocketMetadata,
   Rooms,
   Room,
+  ClientsData,
+  Metadata,
 } from "../../types.js";
 
 const rooms: Rooms = new Map();
@@ -28,6 +30,9 @@ const websocket: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
             break;
           case "leave":
             handleLeave(socket, data);
+            break;
+          case "clients":
+            handleClients(socket, data);
             break;
           case "signal-offer":
             handleSignalOffer(socket, data);
@@ -62,7 +67,7 @@ const handleRoom = (ws: WebSocket.WebSocket, data: RoomData) => {
   const clients = rooms.get(roomId);
   if (!clients) return;
   clients.add(ws);
-  wsMetadata.set(ws, { name: data.name });
+  wsMetadata.set(ws, { clientId: data.clientId });
 
   ws.send(JSON.stringify({ type: "ready", roomId }));
 };
@@ -76,10 +81,27 @@ const handleLeave = (ws: WebSocket.WebSocket, data: LeaveData) => {
     if (clients.size === 0) {
       rooms.delete(data.roomId);
     } else {
-      const message = `User ${metadata?.name} left the room`;
+      const message = `User ${metadata?.clientId} left the room`;
       sendMessageToClients(clients, ws, message);
     }
   }
+};
+
+const handleClients = (ws: WebSocket.WebSocket, data: ClientsData) => {
+  const clients = rooms.get(data.roomId);
+  if (!clients) return;
+  const clientsMetadata: Metadata[] = [];
+  clients.forEach((client) => {
+    const metadata = wsMetadata.get(client);
+    if (metadata) {
+      clientsMetadata.push(metadata);
+    }
+  });
+  ws.send(
+    JSON.stringify({
+      clients: clientsMetadata,
+    })
+  );
 };
 
 const handleSignalOffer = (ws: WebSocket.WebSocket, data: SignalOfferData) => {

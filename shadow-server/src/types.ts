@@ -1,20 +1,25 @@
 import WebSocket from "@fastify/websocket";
 
 export type Room = Set<WebSocket.WebSocket>;
-type Metadata = { name: string };
+export type Metadata = { clientId: string };
 
 export type Rooms = Map<string, Room>;
 export type WebSocketMetadata = Map<WebSocket.WebSocket, Metadata>;
 
 export type RoomData = {
   roomId?: string;
-  name: string;
+  clientId: string;
   type: "create or join";
 };
 
 export type LeaveData = {
   roomId: string;
   type: "leave";
+};
+
+export type ClientsData = {
+  roomId: string;
+  type: "clients";
 };
 
 export type SignalOfferData = {
@@ -38,6 +43,7 @@ export type SignalCandidateData = {
 export type Data =
   | RoomData
   | LeaveData
+  | ClientsData
   | SignalOfferData
   | SignalAnswerData
   | SignalCandidateData;
