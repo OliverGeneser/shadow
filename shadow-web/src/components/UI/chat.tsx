@@ -60,13 +60,19 @@ export function UiChat() {
 								>
 									By {msg.user}
 								</p>
-								<p
-									className={`text-lg font-mono font-semibold max-w-full break-words whitespace-pre-wrap ${
-										msg.isUser ? "text-right text-blue-500" : "text-gray-600"
-									}`}
+								<div
+									className={`${
+										msg.isUser ? "bg-blue-500" : "bg-gray-200"
+									} p-2 rounded-2xl min-w-48`}
 								>
-									{msg.text}
-								</p>
+									<p
+										className={`text-lg font-mono font-semibold max-w-full break-words whitespace-pre-wrap ${
+											msg.isUser ? "text-gray-100" : "text-gray-800"
+										}`}
+									>
+										{msg.text}
+									</p>
+								</div>
 							</div>
 						</div>
 					))}
