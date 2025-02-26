@@ -17,6 +17,7 @@ export function UiChat() {
 		{ id: 2, user: "Dolphin", text: "Hello!" },
 		{ id: 3, user: "Pony", text: "Want to transfer some files?" },
 		{ id: 4, user: "Owl", text: "I have some Linux ISO's!" },
+		{ id: 5, user: "Owlss", text: "o" },
 	]);
 
 	const [input, setInput] = useState("");
@@ -63,7 +64,7 @@ export function UiChat() {
 								<div
 									className={`${
 										msg.isUser ? "bg-blue-500" : "bg-gray-200"
-									} p-2 rounded-2xl min-w-48`}
+									} p-2 rounded-2xl`}
 								>
 									<p
 										className={`text-lg font-mono font-semibold max-w-full break-words whitespace-pre-wrap ${
@@ -80,6 +81,7 @@ export function UiChat() {
 				</div>
 			</div>
 			<div className="items-center space-x-2 border-t pt-1 p-4">
+				{/* display on mobile  */}
 				<UiButton
 					className="float-end mb-2"
 					text="SEND"
