@@ -61,7 +61,7 @@ export function UiChat() {
 									By {msg.user}
 								</p>
 								<p
-									className={`text-lg font-mono font-semibold max-w-full break-words ${
+									className={`text-lg font-mono font-semibold max-w-full break-words whitespace-pre-wrap ${
 										msg.isUser ? "text-right text-blue-500" : "text-gray-600"
 									}`}
 								>
