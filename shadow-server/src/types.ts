@@ -8,7 +8,6 @@ export type WebSocketMetadata = Map<WebSocket.WebSocket, Metadata>;
 
 export type RoomData = {
   roomId?: string;
-  clientId: string;
   type: "create or join";
 };
 

@@ -14,6 +14,12 @@ import {
   ClientsData,
   Metadata,
 } from "../../types.js";
+import {
+  adjectives,
+  animals,
+  colors,
+  uniqueNamesGenerator,
+} from "unique-names-generator";
 
 const rooms: Rooms = new Map();
 const wsMetadata: WebSocketMetadata = new Map();
@@ -67,7 +73,22 @@ const handleRoom = (ws: WebSocket.WebSocket, data: RoomData) => {
   const clients = rooms.get(roomId);
   if (!clients) return;
   clients.add(ws);
-  wsMetadata.set(ws, { clientId: data.clientId });
+  let clientId = uniqueNamesGenerator({
+    dictionaries: [adjectives, colors, animals],
+    separator: " ",
+    style: "capital",
+    length: 3,
+  });
+
+  while (!clientIdExists(clients, clientId)) {
+    clientId = uniqueNamesGenerator({
+      dictionaries: [adjectives, colors, animals],
+      separator: " ",
+      style: "capital",
+      length: 3,
+    });
+  }
+  wsMetadata.set(ws, { clientId });
 
   ws.send(JSON.stringify({ type: "ready", roomId }));
 };
@@ -81,7 +102,7 @@ const handleLeave = (ws: WebSocket.WebSocket, data: LeaveData) => {
     if (clients.size === 0) {
       rooms.delete(data.roomId);
     } else {
-      const message = `User ${metadata?.clientId} left the room`;
+      const message = `${metadata?.clientId} left the room`;
       sendMessageToClients(clients, ws, message);
     }
   }
@@ -152,6 +173,17 @@ const sendMessageToClients = (
       client.send(message);
     }
   });
+};
+
+const clientIdExists = (clients: Room, clientId: string) => {
+  let exists = false;
+  clients.forEach((client) => {
+    const metadata = wsMetadata.get(client);
+    if (metadata?.clientId === clientId) {
+      exists = true;
+    }
+  });
+  return exists;
 };
 
 export default websocket;
