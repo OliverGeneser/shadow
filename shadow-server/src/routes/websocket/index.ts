@@ -65,8 +65,10 @@ const websocket: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
 
 const handleRoom = (ws: WebSocket.WebSocket, data: RoomData) => {
   let roomId = data.roomId;
-  if (roomId === undefined || !rooms.has(roomId)) {
+  if (roomId === undefined || roomId === null) {
     roomId = randomUUID();
+  }
+  if (!rooms.has(roomId)) {
     rooms.set(roomId, new Set());
   }
 
@@ -120,8 +122,9 @@ const handleClients = (ws: WebSocket.WebSocket, data: ClientsData) => {
   });
   ws.send(
     JSON.stringify({
+      type: "clients",
       clients: clientsMetadata,
-    })
+    }),
   );
 };
 
@@ -137,7 +140,7 @@ const handleSignalOffer = (ws: WebSocket.WebSocket, data: SignalOfferData) => {
 
 const handleSignalAnswer = (
   ws: WebSocket.WebSocket,
-  data: SignalAnswerData
+  data: SignalAnswerData,
 ) => {
   const clients = rooms.get(data.roomId);
   if (!clients) return;
@@ -150,7 +153,7 @@ const handleSignalAnswer = (
 
 const handleSignalCandidate = (
   ws: WebSocket.WebSocket,
-  data: SignalCandidateData
+  data: SignalCandidateData,
 ) => {
   const clients = rooms.get(data.roomId);
   if (!clients) return;
@@ -166,7 +169,7 @@ const handleDisconnect = (ws: WebSocket.WebSocket) => {};
 const sendMessageToClients = (
   clients: Room,
   ws: WebSocket.WebSocket,
-  message: string
+  message: string,
 ) => {
   clients.forEach((client) => {
     if (client !== ws) {
