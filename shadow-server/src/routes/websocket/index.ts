@@ -80,7 +80,7 @@ const handleRoom = (ws: WebSocket.WebSocket, data: RoomData) => {
     length: 3,
   });
 
-  while (!clientIdExists(clients, clientId)) {
+  while (clientIdExists(clients, clientId)) {
     clientId = uniqueNamesGenerator({
       dictionaries: [adjectives, colors, animals],
       separator: " ",
