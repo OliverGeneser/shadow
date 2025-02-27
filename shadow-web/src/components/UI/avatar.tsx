@@ -1,11 +1,16 @@
 "use client";
 import { useRef } from "react";
 
-export function UiAvatar(props: { userName: string }) {
+export function UiAvatar(props: {
+	userName: string;
+	disabled?: boolean;
+	className?: string;
+	style?: React.CSSProperties;
+}) {
 	const fileInputRef = useRef<HTMLInputElement>(null);
 
 	const handleAvatarClick = () => {
-		fileInputRef.current?.click();
+		!props.disabled && fileInputRef.current?.click();
 	};
 
 	const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -18,7 +23,12 @@ export function UiAvatar(props: { userName: string }) {
 
 	return (
 		<div
-			className="absolute flex items-center justify-center min-w-20 max-w-36 p-2 aspect-square rounded-full bg-gray-600 hover:bg-gray-700 shadow-lg cursor-pointer"
+			className={`absolute flex items-center justify-center overflow-hidden min-w-20 max-w-36 p-2 aspect-square rounded-full shadow-lg ${
+				props.disabled
+					? "bg-blue-500"
+					: "bg-gray-600 hover:bg-gray-700 cursor-pointer"
+			} ${props.className}`}
+			style={props.style}
 			onClick={handleAvatarClick}
 		>
 			<span className="font-medium text-gray-100 text-center break-words">
