@@ -4,15 +4,14 @@ import WebSocket from "@fastify/websocket";
 import {
   Data,
   RoomData,
-  LeaveData,
   SignalOfferData,
   SignalCandidateData,
   SignalAnswerData,
   WebSocketMetadata,
   Rooms,
   Room,
-  ClientsData,
   Metadata,
+  Subset,
 } from "../../types.js";
 import {
   adjectives,
@@ -35,10 +34,10 @@ const websocket: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
             handleRoom(socket, data);
             break;
           case "leave":
-            handleLeave(socket, data);
+            handleLeave(socket);
             break;
           case "clients":
-            handleClients(socket, data);
+            handleClients(socket);
             break;
           case "signal-offer":
             handleSignalOffer(socket, data);
@@ -58,7 +57,7 @@ const websocket: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     });
 
     socket.on("close", () => {
-      handleDisconnect(socket);
+      handleLeave(socket);
     });
   });
 };
@@ -90,34 +89,43 @@ const handleRoom = (ws: WebSocket.WebSocket, data: RoomData) => {
       length: 3,
     });
   }
-  wsMetadata.set(ws, { clientId });
 
-  ws.send(JSON.stringify({ type: "ready", roomId }));
+  const metadata = { clientId, roomId };
+  wsMetadata.set(ws, metadata);
+
+  ws.send(JSON.stringify({ type: "ready", metadata }));
 };
 
-const handleLeave = (ws: WebSocket.WebSocket, data: LeaveData) => {
-  const clients = rooms.get(data.roomId);
+const handleLeave = (ws: WebSocket.WebSocket) => {
+  const metadata = wsMetadata.get(ws);
+  if (!metadata) {
+    ws.close();
+    return;
+  }
+  const clients = rooms.get(metadata.roomId);
   if (clients) {
     clients.delete(ws);
-    const metadata = wsMetadata.get(ws);
     wsMetadata.delete(ws);
     if (clients.size === 0) {
-      rooms.delete(data.roomId);
+      rooms.delete(metadata.roomId);
     } else {
-      const message = `${metadata?.clientId} left the room`;
+      const message = `${metadata.clientId} left the room`;
       sendMessageToClients(clients, ws, message);
     }
   }
+  ws.close();
 };
 
-const handleClients = (ws: WebSocket.WebSocket, data: ClientsData) => {
-  const clients = rooms.get(data.roomId);
+const handleClients = (ws: WebSocket.WebSocket) => {
+  const metadata = wsMetadata.get(ws);
+  if (!metadata) return;
+  const clients = rooms.get(metadata.roomId);
   if (!clients) return;
-  const clientsMetadata: Metadata[] = [];
+  const clientsMetadata: Subset<Metadata, { clientId: string }>[] = [];
   clients.forEach((client) => {
     const metadata = wsMetadata.get(client);
     if (metadata) {
-      clientsMetadata.push(metadata);
+      clientsMetadata.push({ clientId: metadata.clientId });
     }
   });
   ws.send(
@@ -129,7 +137,9 @@ const handleClients = (ws: WebSocket.WebSocket, data: ClientsData) => {
 };
 
 const handleSignalOffer = (ws: WebSocket.WebSocket, data: SignalOfferData) => {
-  const clients = rooms.get(data.roomId);
+  const metadata = wsMetadata.get(ws);
+  if (!metadata) return;
+  const clients = rooms.get(metadata.roomId);
   if (!clients) return;
   const message = JSON.stringify({
     type: "offer",
@@ -142,7 +152,9 @@ const handleSignalAnswer = (
   ws: WebSocket.WebSocket,
   data: SignalAnswerData,
 ) => {
-  const clients = rooms.get(data.roomId);
+  const metadata = wsMetadata.get(ws);
+  if (!metadata) return;
+  const clients = rooms.get(metadata.roomId);
   if (!clients) return;
   const message = JSON.stringify({
     type: "answer",
@@ -155,7 +167,9 @@ const handleSignalCandidate = (
   ws: WebSocket.WebSocket,
   data: SignalCandidateData,
 ) => {
-  const clients = rooms.get(data.roomId);
+  const metadata = wsMetadata.get(ws);
+  if (!metadata) return;
+  const clients = rooms.get(metadata.roomId);
   if (!clients) return;
   const message = JSON.stringify({
     type: "candidate",
@@ -163,8 +177,6 @@ const handleSignalCandidate = (
   });
   sendMessageToClients(clients, ws, message);
 };
-
-const handleDisconnect = (ws: WebSocket.WebSocket) => {};
 
 const sendMessageToClients = (
   clients: Room,

@@ -1,7 +1,9 @@
 import WebSocket from "@fastify/websocket";
 
+export type Subset<T extends U, U> = U;
+
 export type Room = Set<WebSocket.WebSocket>;
-export type Metadata = { clientId: string };
+export type Metadata = { clientId: string; roomId: string };
 
 export type Rooms = Map<string, Room>;
 export type WebSocketMetadata = Map<WebSocket.WebSocket, Metadata>;
@@ -12,30 +14,25 @@ export type RoomData = {
 };
 
 export type LeaveData = {
-  roomId: string;
   type: "leave";
 };
 
 export type ClientsData = {
-  roomId: string;
   type: "clients";
 };
 
 export type SignalOfferData = {
   signal: unknown;
-  roomId: string;
   type: "signal-offer";
 };
 
 export type SignalAnswerData = {
   signal: unknown;
-  roomId: string;
   type: "signal-answer";
 };
 
 export type SignalCandidateData = {
   signal: unknown;
-  roomId: string;
   type: "signal-candidate";
 };
 
