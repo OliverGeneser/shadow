@@ -112,7 +112,10 @@ const handleLeave = (ws: WebSocket.WebSocket) => {
     if (clients.size === 0) {
       rooms.delete(metadata.roomId);
     } else {
-      const message = `${metadata.clientId} left the room`;
+      const message = JSON.stringify({
+        type: "leave",
+        client: metadata.clientId,
+      });
       sendMessageToClients(clients, ws, message);
     }
   }
