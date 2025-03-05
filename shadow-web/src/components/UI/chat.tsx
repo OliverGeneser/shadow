@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { UiTextarea } from "./textarea";
-import button from "./button";
+import { button } from "./button";
 
 type Message = {
   id: number;
@@ -67,7 +67,7 @@ export function UiChat() {
                   } rounded-2xl p-2`}
                 >
                   <p
-                    className={`max-w-full whitespace-pre-wrap break-words font-mono text-base font-semibold ${
+                    className={`max-w-full font-mono text-base font-semibold break-words whitespace-pre-wrap ${
                       msg.isUser ? "text-gray-100" : "text-gray-800"
                     }`}
                   >

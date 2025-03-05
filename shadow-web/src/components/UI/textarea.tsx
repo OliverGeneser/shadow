@@ -9,7 +9,7 @@ export function UiTextarea(props: {
       value={props.value}
       onChange={(e) => props.onChange(e.target.value)}
       onKeyDown={props.onKeyDown}
-      className="h-20 w-full flex-1 resize-none overflow-y-auto break-words rounded-lg border p-2 text-gray-600"
+      className="h-20 w-full flex-1 resize-none overflow-y-auto rounded-lg border p-2 break-words text-gray-600"
       placeholder={props.placeholder}
     />
   );

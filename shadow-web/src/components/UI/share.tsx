@@ -1,7 +1,9 @@
 "use client";
 import { useState } from "react";
 import QRCode from "react-qr-code";
-import button from "./button";
+import { button } from "./button";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faXmark } from "@fortawesome/free-solid-svg-icons";
 
 export default function ShareButton() {
   const [showShareModal, setShowShareModal] = useState<boolean>(false);
@@ -37,20 +39,22 @@ const ShareModal = (props: ShareModalProps) => {
           <div className="absolute inset-0 bg-gray-500 opacity-75"></div>
         </div>
         <span className="hidden sm:inline-block sm:h-screen sm:align-middle"></span>
-        <div className="inline-block transform rounded-lg bg-gray-700 px-4 pb-4 pt-5 text-left align-bottom shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6 sm:align-middle">
+        <div className="inline-block transform rounded-lg bg-gray-700 px-4 pt-5 pb-4 text-left align-bottom shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6 sm:align-middle">
           <div className="align-center flex w-full flex-col sm:items-start">
             <button
               className={button({
                 color: "primary",
                 size: "sm",
-                className: "self-end rounded-md font-medium shadow-sm",
+                padding: "none",
+                className:
+                  "self-end rounded-md px-2 py-1 font-medium shadow-sm",
               })}
               onClick={props.onCloseClick}
             >
-              X
+              <FontAwesomeIcon icon={faXmark} />
             </button>
-            <div className="relative mt-3 text-center">
-              <h3 className="4xl:text-2xl text-lg font-medium leading-6 text-gray-100">
+            <div className="relative text-center">
+              <h3 className="4xl:text-2xl text-lg leading-6 font-medium text-gray-100">
                 Share Room
               </h3>
               <div className="mt-2">
@@ -85,11 +89,11 @@ const URLSection = () => {
 
   return (
     <div
-      className="relative mt-4 w-auto max-w-full cursor-pointer select-none self-center rounded-md bg-gray-600 text-gray-300 transition duration-150 ease-in-out hover:bg-gray-500"
+      className="relative mt-4 w-auto max-w-full cursor-pointer self-center rounded-md bg-gray-600 text-gray-300 transition duration-150 ease-in-out select-none hover:bg-gray-500"
       onClick={() => (!copied ? copyURLToClipboard() : null)}
     >
       <div className="w-auto overflow-x-scroll">
-        <p className="4xl:text-lg break-keep p-2 text-sm leading-5">
+        <p className="4xl:text-lg p-2 text-sm leading-5 break-keep">
           {window.location.href}
         </p>
       </div>
@@ -122,7 +126,7 @@ const QRSection = () => {
 
 const CopiedPopover = () => {
   return (
-    <div className="4xl:-top-12 4xl:text-lg 4xl:before:border-8 absolute -top-10 left-1/2 -translate-x-1/2 rounded-md bg-gray-500 px-3 py-1 text-sm text-white shadow-md before:absolute before:left-1/2 before:top-full before:-translate-x-1/2 before:border-4 before:border-transparent before:border-t-gray-500 before:content-['']">
+    <div className="4xl:-top-12 4xl:text-lg 4xl:before:border-8 absolute -top-10 left-1/2 -translate-x-1/2 rounded-md bg-gray-500 px-3 py-1 text-sm text-white shadow-md before:absolute before:top-full before:left-1/2 before:-translate-x-1/2 before:border-4 before:border-transparent before:border-t-gray-500 before:content-['']">
       Copied!
     </div>
   );

@@ -10,7 +10,8 @@ import {
 import { useRef, useState } from "react";
 import { UiChat } from "./components/UI/chat";
 import { UiUserNetwork } from "./components/UI/userNetwork";
-import button from "./components/UI/button";
+import { button } from "./components/UI/button";
+import ShareButton from "./components/UI/share";
 
 function Room() {
   const { id } = useParams();
@@ -52,6 +53,9 @@ function Room() {
           <UiChat />
         </div>
       )}
+      <div className="absolute bottom-4 left-4">
+        <ShareButton />
+      </div>
     </div>
   );
 }
@@ -75,7 +79,7 @@ function MobileChatPanel() {
           color: "primary",
           padding: "none",
           className:
-            "absolute left-0 top-7 -translate-x-full rounded-r-none px-4 py-2",
+            "absolute top-7 left-0 -translate-x-full rounded-r-none px-4 py-2",
         })}
       >
         Chat

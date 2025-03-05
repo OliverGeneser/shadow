@@ -1,7 +1,7 @@
 import { tv } from "tailwind-variants";
 
-export default tv({
-  base: "rounded-lg bg-gray-600 text-white transition duration-150 ease-in-out hover:bg-gray-500",
+export const button = tv({
+  base: "cursor-pointer rounded-lg bg-gray-600 text-white transition duration-150 ease-in-out hover:bg-gray-500",
   variants: {
     color: {
       primary: "bg-gray-600 text-white hover:bg-gray-500",
