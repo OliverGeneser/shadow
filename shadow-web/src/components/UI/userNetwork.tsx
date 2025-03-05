@@ -1,96 +1,106 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { UiAvatar } from "./avatar";
+import ForceGraph2D from "react-force-graph-2d";
 
 type User = {
   id: number;
   userName: string;
 };
 
-export function UiUserNetwork(props: { me: User; users: User[] }) {
+type Link = {
+  source: number;
+  target: number;
+};
+
+export function UiUserNetwork({ me, users }: { me: User; users: User[] }) {
   const boxRef = useRef<HTMLDivElement>(null);
-  const [centerX, setCenterX] = useState(0);
-  const [centerY, setCenterY] = useState(0);
-  const [minRadius, setMinRadius] = useState(0);
-  const [maxRadius, setMaxRadius] = useState(0);
-  const [avatarMaxRadius, setAvatarMaxRadius] = useState(0);
+  const graphRef = useRef<any>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedNode, setSelectedNode] = useState<User | null>(null);
 
-  const userPositions = props.users.map((user, index) => {
-    const angleOffset = Math.random() * 0.3;
-    const angle =
-      -Math.PI / 2 + (index / props.users.length) * 2 * Math.PI + angleOffset;
-    const radius = minRadius + Math.random() * (maxRadius - minRadius);
+  const nodes = [{ id: me.id, userName: me.userName }, ...users];
+  const links: Link[] = users.map((user) => ({
+    source: me.id,
+    target: user.id,
+  }));
 
-    const x = centerX + radius * Math.cos(angle);
-    const y = centerY + radius * Math.sin(angle);
+  const graphData = {
+    nodes,
+    links,
+  };
 
-    return { ...user, x, y };
-  });
+  const [width, setWidth] = useState(0);
+  const [height, setHeight] = useState(0);
 
   useEffect(() => {
-    if (boxRef.current === null) return;
-    const tempCenterX = boxRef.current.clientWidth / 2;
-    const tempCenterY = boxRef.current.clientHeight / 2;
-    const tempRadius = tempCenterX > tempCenterY ? tempCenterY : tempCenterX;
-    const tempAvatarRadius = tempRadius / 7;
+    const handleResize = () => {
+      setWidth(boxRef.current?.clientWidth ?? 0);
+      setHeight(boxRef.current?.clientHeight ?? 0);
+    };
 
-    setCenterX(tempCenterX);
-    setCenterY(tempCenterY);
-    setMinRadius(tempAvatarRadius * 2.2);
-    setMaxRadius(tempRadius - tempAvatarRadius);
-    setAvatarMaxRadius(tempAvatarRadius);
-  }, [boxRef.current?.clientHeight, boxRef.current?.clientWidth]);
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  const handleNodeClick = (node: any) => {
+    setSelectedNode(node);
+    console.log("Clicked on user ID:", node.id);
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (files && files.length > 0 && selectedNode) {
+      console.log("Selected files:", files);
+      console.log("Upload files to user ID:", selectedNode.id);
+      // TODO: Handle file upload logic here
+    }
+  };
 
   return (
     <div
       className="relative w-full h-full flex items-center justify-center"
       ref={boxRef}
     >
-      {centerX > 0 && centerY > 0 && boxRef.current ? (
-        <>
-          <svg
-            className="absolute w-full h-full"
-            viewBox={`0 0 ${boxRef.current.clientWidth} ${boxRef.current.clientHeight}`}
-          >
-            {userPositions.map((user) => (
-              <line
-                key={user.id}
-                x1={centerX}
-                y1={centerY}
-                x2={user.x}
-                y2={user.y}
-                stroke="white"
-                strokeWidth="1"
-              />
-            ))}
-          </svg>
+      <input
+        type="file"
+        className="hidden"
+        ref={fileInputRef}
+        onChange={handleFileChange}
+        multiple
+      />
 
-          <UiAvatar
-            userName={props.me.userName}
-            disabled
-            style={{
-              maxWidth: avatarMaxRadius * 2,
-              minWidth: avatarMaxRadius * 1.5,
-              fontSize: avatarMaxRadius / 4,
-            }}
-          />
+      <ForceGraph2D
+        ref={graphRef}
+        graphData={graphData}
+        width={width}
+        height={height}
+        nodeLabel={(node: any) => node.userName}
+        nodeCanvasObject={(node, ctx, globalScale) => {
+          const avatarSize = 5;
+          const fontSize = 12 / globalScale;
+          const userName = node.userName as string;
 
-          {userPositions.map((user) => (
-            <UiAvatar
-              key={user.id}
-              userName={user.userName}
-              style={{
-                maxWidth: avatarMaxRadius * 2,
-                minWidth: avatarMaxRadius,
-                fontSize: avatarMaxRadius / 4,
-                left: user.x,
-                top: user.y,
-                transform: "translate(-50%,-50%)",
-              }}
-            />
-          ))}
-        </>
-      ) : null}
+          // Draw avatar circle
+          ctx.beginPath();
+          ctx.arc(node.x!, node.y!, avatarSize, 0, 2 * Math.PI, false);
+          ctx.fillStyle = node.id === me.id ? "#3b82f6" : "#374151"; // Blue for me, gray for others
+          ctx.fill();
+
+          // Draw user name inside avatar
+          ctx.font = `${fontSize}px Sans-Serif`;
+          ctx.fillStyle = "#fff";
+          ctx.textAlign = "center";
+          ctx.fillText(userName, node.x!, node.y! + fontSize / 2);
+        }}
+        linkColor={() => "rgba(255, 255, 255, 0.7)"}
+        linkWidth={1}
+        backgroundColor="transparent"
+        onNodeClick={handleNodeClick}
+        minZoom={5}
+        maxZoom={15}
+      />
     </div>
   );
 }

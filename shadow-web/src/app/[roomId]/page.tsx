@@ -4,17 +4,17 @@ import { UiButton } from "~/components/UI/button";
 import { UiChat } from "~/components/UI/chat";
 import { UiUserNetwork } from "~/components/UI/userNetwork";
 
-export default function ComponentTestPage() {
+export default function RoomPage() {
   return (
     <div className=" bg-slate-500 h-screen flex relative">
       <UiUserNetwork
         me={{ id: 0, userName: "Me" }}
         users={[
-          { id: 1, userName: "Alice" },
-          { id: 2, userName: "Bob" },
-          { id: 3, userName: "Charlieddddddddddddd" },
+          { id: 1, userName: "user 1" },
+          { id: 2, userName: "user 2" },
+          { id: 3, userName: "Charli edddddd ddddddd" },
           { id: 4, userName: "David sdd sd" },
-          { id: 5, userName: "Cedddddddddwdddd" },
+          { id: 5, userName: "Cedd ddddddd wdddd" },
           { id: 6, userName: "David sdd sd" },
         ]}
       />
