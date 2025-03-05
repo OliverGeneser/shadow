@@ -93,6 +93,9 @@ const handleRoom = (ws: WebSocket.WebSocket, data: RoomData) => {
   const metadata = { clientId, roomId };
   wsMetadata.set(ws, metadata);
 
+  const message = createClientsMessage(clients);
+  sendMessageToClients(clients, ws, message);
+
   ws.send(JSON.stringify({ type: "ready", metadata }));
 };
 
@@ -121,6 +124,12 @@ const handleClients = (ws: WebSocket.WebSocket) => {
   if (!metadata) return;
   const clients = rooms.get(metadata.roomId);
   if (!clients) return;
+
+  const message = createClientsMessage(clients);
+  ws.send(message);
+};
+
+const createClientsMessage = (clients: Room) => {
   const clientsMetadata: Subset<Metadata, { clientId: string }>[] = [];
   clients.forEach((client) => {
     const metadata = wsMetadata.get(client);
@@ -128,12 +137,10 @@ const handleClients = (ws: WebSocket.WebSocket) => {
       clientsMetadata.push({ clientId: metadata.clientId });
     }
   });
-  ws.send(
-    JSON.stringify({
-      type: "clients",
-      clients: clientsMetadata,
-    }),
-  );
+  return JSON.stringify({
+    type: "clients",
+    clients: clientsMetadata,
+  });
 };
 
 const handleSignalOffer = (ws: WebSocket.WebSocket, data: SignalOfferData) => {
