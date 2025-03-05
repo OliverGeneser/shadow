@@ -60,7 +60,7 @@ export function UiUserNetwork({ me, users }: { me: User; users: User[] }) {
 
   return (
     <div
-      className="relative w-full h-full flex items-center justify-center"
+      className="relative flex h-full w-full items-center justify-center"
       ref={boxRef}
     >
       <input

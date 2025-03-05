@@ -10,7 +10,7 @@ import {
 import { useRef, useState } from "react";
 import { UiChat } from "./components/UI/chat";
 import { UiUserNetwork } from "./components/UI/userNetwork";
-import { UiButton } from "./components/UI/button";
+import button from "./components/UI/button";
 
 function Room() {
   const { id } = useParams();
@@ -37,7 +37,7 @@ function Room() {
   };
 
   return (
-    <div className="w-full bg-slate-500 h-screen flex relative">
+    <div className="relative flex h-screen w-full bg-slate-500">
       <UiUserNetwork
         me={{ id: 0, userName: client }}
         users={clients.map((client: any, index) => {
@@ -48,7 +48,7 @@ function Room() {
       {window.innerWidth < 1000 ? (
         <MobileChatPanel />
       ) : (
-        <div className="py-5 h-screen">
+        <div className="h-screen py-5">
           <UiChat />
         </div>
       )}
@@ -64,17 +64,23 @@ function MobileChatPanel() {
 
   return (
     <div
-      className={` fixed top-1/2 -translate-y-1/2 ease-in-out duration-300 z-50`}
+      className={`fixed top-1/2 z-50 -translate-y-1/2 duration-300 ease-in-out`}
       style={{
         right: isOpen ? "0px" : -(chatRef.current?.clientWidth ?? 0),
       }}
     >
-      <UiButton
-        text="chat"
-        className="absolute top-7 left-0 -translate-x-full rounded-r-none"
-        onClick={() => setIsOpen(!isOpen)}
-      />
-      <div ref={chatRef} className="py-5 h-screen">
+      <button
+        className={button({
+          size: "sm",
+          color: "primary",
+          padding: "none",
+          className:
+            "absolute left-0 top-7 -translate-x-full rounded-r-none px-4 py-2",
+        })}
+      >
+        Chat
+      </button>
+      <div ref={chatRef} className="h-screen py-5">
         <UiChat />
       </div>
     </div>

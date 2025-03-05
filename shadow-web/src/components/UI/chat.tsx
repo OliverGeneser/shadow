@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { UiButton } from "./button";
 import { UiTextarea } from "./textarea";
+import button from "./button";
 
 type Message = {
   id: number;
@@ -45,7 +45,7 @@ export function UiChat() {
   };
 
   return (
-    <div className="w-72 sm:w-96 mx-auto border rounded-lg shadow-lg bg-gray-50 h-full flex flex-col">
+    <div className="mx-auto flex h-full w-72 flex-col rounded-lg border bg-gray-50 shadow-lg sm:w-96">
       <div className="flex-1 overflow-y-auto p-4">
         <div className="space-y-3">
           {messages.map((msg) => (
@@ -55,7 +55,7 @@ export function UiChat() {
             >
               <div className="max-w-xs">
                 <p
-                  className={` flex ${
+                  className={`flex ${
                     msg.isUser ? "justify-end" : "justify-start"
                   } text-xs text-gray-500`}
                 >
@@ -64,10 +64,10 @@ export function UiChat() {
                 <div
                   className={`${
                     msg.isUser ? "bg-blue-500" : "bg-gray-200"
-                  } p-2 rounded-2xl`}
+                  } rounded-2xl p-2`}
                 >
                   <p
-                    className={`text-base font-mono font-semibold max-w-full break-words whitespace-pre-wrap ${
+                    className={`max-w-full whitespace-pre-wrap break-words font-mono text-base font-semibold ${
                       msg.isUser ? "text-gray-100" : "text-gray-800"
                     }`}
                   >
@@ -80,13 +80,18 @@ export function UiChat() {
           <div ref={messagesEndRef} />
         </div>
       </div>
-      <div className="items-center space-x-2 border-t pt-1 p-4">
+      <div className="items-center space-x-2 border-t p-4 pt-1">
         {/* display on mobile  */}
-        <UiButton
-          className="float-end mb-2"
-          text="SEND"
+        <button
+          className={button({
+            color: "primary",
+            size: "sm",
+            className: "float-end mb-2",
+          })}
           onClick={sendMessage}
-        />
+        >
+          SEND
+        </button>
         <UiTextarea
           value={input}
           onChange={(str) => setInput(str)}
