@@ -12,15 +12,18 @@ type Link = {
   target: number;
 };
 
-export function UiUserNetwork({ me, users }: { me: User; users: User[] }) {
+export function UiUserNetwork(props: { me: User; users: User[] }) {
   const boxRef = useRef<HTMLDivElement>(null);
   const graphRef = useRef<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedNode, setSelectedNode] = useState<User | null>(null);
 
-  const nodes = [{ id: me.id, userName: me.userName }, ...users];
-  const links: Link[] = users.map((user) => ({
-    source: me.id,
+  const nodes = [
+    { id: props.me.id, userName: props.me.userName },
+    ...props.users,
+  ];
+  const links: Link[] = props.users.map((user) => ({
+    source: props.me.id,
     target: user.id,
   }));
 
@@ -44,6 +47,7 @@ export function UiUserNetwork({ me, users }: { me: User; users: User[] }) {
   }, []);
 
   const handleNodeClick = (node: any) => {
+    if (node.id === props.me.id) return;
     setSelectedNode(node);
     console.log("Clicked on user ID:", node.id);
     fileInputRef.current?.click();
@@ -78,21 +82,49 @@ export function UiUserNetwork({ me, users }: { me: User; users: User[] }) {
         height={height}
         nodeLabel={(node: any) => node.userName}
         nodeCanvasObject={(node, ctx, globalScale) => {
-          const avatarSize = 5;
+          const avatarSize = 8;
+          const maxWidth = 15;
+          const lineHeight = 12 / globalScale;
           const fontSize = 12 / globalScale;
           const userName = node.userName as string;
 
           // Draw avatar circle
           ctx.beginPath();
           ctx.arc(node.x!, node.y!, avatarSize, 0, 2 * Math.PI, false);
-          ctx.fillStyle = node.id === me.id ? "#3b82f6" : "#374151"; // Blue for me, gray for others
+          ctx.fillStyle = node.id === props.me.id ? "#3b82f6" : "#374151";
           ctx.fill();
 
-          // Draw user name inside avatar
+          // Set text styles
           ctx.font = `${fontSize}px Sans-Serif`;
           ctx.fillStyle = "#fff";
           ctx.textAlign = "center";
-          ctx.fillText(userName, node.x!, node.y! + fontSize / 2);
+
+          // Clip text to prevent overflow
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(node.x!, node.y!, avatarSize, 0, 2 * Math.PI, false);
+          ctx.clip();
+
+          // Wrap text if it exceeds maxWidth
+          const words = userName.split(" ");
+          let line = "";
+          let y = node.y! - ((words.length - 1) * lineHeight) / 2;
+
+          for (let i = 0; i < words.length; i++) {
+            const testLine = line + words[i] + " ";
+            const testWidth = ctx.measureText(testLine).width;
+
+            if (testWidth > maxWidth) {
+              ctx.fillText(line, node.x!, y);
+              line = words[i] + " ";
+              y += lineHeight;
+            } else {
+              line = testLine;
+            }
+          }
+          ctx.fillText(line, node.x!, y);
+
+          ctx.restore();
         }}
         linkColor={() => "rgba(255, 255, 255, 0.7)"}
         linkWidth={1}
