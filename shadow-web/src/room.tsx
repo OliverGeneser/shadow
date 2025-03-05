@@ -17,7 +17,6 @@ function Room() {
   const navigate = useNavigate();
   const client = useClientId();
   const clients = useClients();
-  const room = useRoomId();
 
   useEffect(() => {
     if (!uuidValidate(id)) {
@@ -38,29 +37,13 @@ function Room() {
   };
 
   return (
-    <div className=" bg-slate-500 h-screen flex relative">
+    <div className="w-full bg-slate-500 h-screen flex relative">
       <UiUserNetwork
-        me={{ id: 0, userName: "Me" }}
-        users={[
-          { id: 1, userName: "user 1" },
-          { id: 2, userName: "user 2" },
-          { id: 3, userName: "Charli edddddd ddddddd" },
-          { id: 4, userName: "David sdd sd" },
-          { id: 5, userName: "Cedd ddddddd wdddd" },
-          { id: 6, userName: "David sdd sd" },
-        ]}
+        me={{ id: 0, userName: client }}
+        users={clients.map((client: any, index) => {
+          return { id: index + 1, userName: client.clientId };
+        })}
       />
-      <div>client:{client}</div>
-      <div>room:{room}</div>
-      <div>
-        clients:
-        {clients.map((client, index) => (
-          <div key={index} onClick={() => makeConnection(client.clientId)}>
-            {client.clientId}
-          </div>
-        ))}
-      </div>
-      <button onClick={sendMessageE}>Send Message</button>
 
       {window.innerWidth < 1000 ? (
         <MobileChatPanel />

@@ -49,7 +49,9 @@ export const store = createStore({
           case "clients":
             return {
               ...context,
-              clients: msg.clients,
+              clients: msg.clients.filter(
+                (client) => client.clientId !== context.clientId,
+              ),
             };
 
           default:
