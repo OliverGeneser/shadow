@@ -1,0 +1,4 @@
+packages:
+  - "shadow-web"
+  - "shadow-server"
+  - "shadow-shared"
