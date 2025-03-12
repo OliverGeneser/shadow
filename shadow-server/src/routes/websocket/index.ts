@@ -14,14 +14,34 @@ import {
   Subset,
 } from "../../types.js";
 import {
-  adjectives,
   animals,
-  colors,
   uniqueNamesGenerator,
 } from "unique-names-generator";
 
 const rooms: Rooms = new Map();
 const wsMetadata: WebSocketMetadata = new Map();
+
+const colorMap = ["Azure",
+  "Beige",
+  "Brick",
+  "Bronze",
+  "Charcoal",
+  "Coral",
+  "Cyan",
+  "Emerald",
+  "Fawn",
+  "Indigo",
+  "Amethyst",
+  "Jade",
+  "Lavender",
+  "Maroon",
+  "Olive",
+  "Peach",
+  "Rosewood",
+  "Sapphire",
+  "Teal",
+  "Walnut",
+]
 
 const websocket: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
   fastify.get("/", { websocket: true }, async function (socket, req) {
@@ -75,18 +95,18 @@ const handleRoom = (ws: WebSocket.WebSocket, data: RoomData) => {
   if (!clients) return;
   clients.add(ws);
   let clientId = uniqueNamesGenerator({
-    dictionaries: [adjectives, colors, animals],
+    dictionaries: [colorMap, animals],
     separator: " ",
     style: "capital",
-    length: 3,
+    length: 2,
   });
 
   while (clientIdExists(clients, clientId)) {
     clientId = uniqueNamesGenerator({
-      dictionaries: [adjectives, colors, animals],
+      dictionaries: [colorMap, animals],
       separator: " ",
       style: "capital",
-      length: 3,
+      length: 2,
     });
   }
 
