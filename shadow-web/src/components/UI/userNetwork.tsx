@@ -80,58 +80,56 @@ export function UiUserNetwork(props: { me: User; users: User[] }) {
         graphData={graphData}
         width={width}
         height={height}
-        nodeLabel={(node: any) => node.userName}
-        nodeCanvasObject={(node, ctx, globalScale) => {
-          const avatarSize = 8;
-          const maxWidth = 15;
-          const lineHeight = 12 / globalScale;
-          const fontSize = 12 / globalScale;
-          const userName = node.userName as string;
-
-          // Draw avatar circle
-          ctx.beginPath();
-          ctx.arc(node.x!, node.y!, avatarSize, 0, 2 * Math.PI, false);
-          ctx.fillStyle = node.id === props.me.id ? "#3b82f6" : "#374151";
-          ctx.fill();
-
-          // Set text styles
-          ctx.font = `${fontSize}px Sans-Serif`;
-          ctx.fillStyle = "#fff";
-          ctx.textAlign = "center";
-
-          // Clip text to prevent overflow
-          ctx.save();
-          ctx.beginPath();
-          ctx.arc(node.x!, node.y!, avatarSize, 0, 2 * Math.PI, false);
-          ctx.clip();
-
-          // Wrap text if it exceeds maxWidth
-          const words = userName.split(" ");
-          let line = "";
-          let y = node.y! - ((words.length - 1) * lineHeight) / 2;
-
-          for (let i = 0; i < words.length; i++) {
-            const testLine = line + words[i] + " ";
-            const testWidth = ctx.measureText(testLine).width;
-
-            if (testWidth > maxWidth) {
-              ctx.fillText(line, node.x!, y);
-              line = words[i] + " ";
-              y += lineHeight;
-            } else {
-              line = testLine;
-            }
-          }
-          ctx.fillText(line, node.x!, y);
-
-          ctx.restore();
-        }}
+        nodeVal={(node) => (node.id === props.me.id ? 10 : 8)}
         linkColor={() => "rgba(255, 255, 255, 0.7)"}
         linkWidth={1}
-        backgroundColor="transparent"
         onNodeClick={handleNodeClick}
+        enablePanInteraction={false}
         minZoom={5}
         maxZoom={15}
+        nodeCanvasObject={(node, ctx, globalScale) => {
+          const label = node.userName as string;
+          const fontSize = 12 / globalScale;
+          const [color, animal] = label.split(" ");
+          // Define a color map to convert text to actual color codes
+          const colorMap: { [key: string]: string } = {
+            Azure: "#007FFF",
+            Beige: "#A89C8C",
+            Brick: "#CB4154",
+            Bronze: "#CD7F32",
+            Charcoal: "#36454F",
+            Coral: "#FF6F61",
+            Cyan: "#00AEEF",
+            Emerald: "#50C878",
+            Fawn: "#C89B6E",
+            Indigo: "#4B0082",
+            Jade: "#00A86B",
+            Lavender: "#916BBF",
+            Maroon: "#800000",
+            Olive: "#5A6E41",
+            Peach: "#E9967A",
+            Rosewood: "#65000B",
+            Sapphire: "#0F52BA",
+            Teal: "#008080",
+            Walnut: "#5D3A1A",
+            Amethyst: "#9966CC",
+          };
+
+          const circleColor = colorMap[color] || "#3b82f6";
+
+          const avatarSize = node.id === props.me.id ? 10 : 8;
+          ctx.beginPath();
+          ctx.arc(node.x!, node.y!, avatarSize, 0, 2 * Math.PI, false);
+          ctx.fillStyle = circleColor;
+          ctx.fill();
+
+          ctx.font = `italic ${fontSize * 0.8}px Sans-Serif`;
+          ctx.fillStyle = "#fff";
+          ctx.textAlign = "center";
+          ctx.fillText(`(${color})`, node.x!, node.y! - 2);
+          ctx.font = `bold ${fontSize}px Sans-Serif`;
+          ctx.fillText(animal, node.x!, node.y! + 1);
+        }}
       />
     </div>
   );
