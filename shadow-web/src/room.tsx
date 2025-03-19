@@ -41,13 +41,8 @@ function Room() {
         onClick={makeConnection}
       />
 
-      {window.innerWidth < 1000 ? (
-        <MobileChatPanel />
-      ) : (
-        <div className="h-screen py-5">
-          <UiChat />
-        </div>
-      )}
+      <MobileChatPanel open={window.innerWidth > 1000}/>
+
       <div className="absolute bottom-4 left-4">
         <ShareButton />
       </div>
@@ -57,9 +52,9 @@ function Room() {
 
 export default Room;
 
-function MobileChatPanel() {
+function MobileChatPanel(props:{open:boolean}) {
   const chatRef = useRef<HTMLDivElement>(null);
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(props.open);
 
   return (
     <div
