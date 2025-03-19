@@ -118,15 +118,16 @@ export const store = createStore({
 
       return { ...context, socket: tempSocket, roomId: event.roomId };
     },
-    startRTCConnection: (context, event: { peerID: string }) => {
+    startRTCConnection: (context, event: { peerId: string }) => {
       const connection = new RTCPeerConnection(config);
       connection.onicecandidate = getOnIceCandidate(
         context.socket,
-        event.peerID,
+        event.peerId,
       );
       const connections = context.rtcConnections;
-      connections[event.peerID] = connection;
+      connections[event.peerId] = connection;
 
+      console.log(connections);
       return { ...context, rtcConnections: connections };
     },
     setupConnection: (context) => {

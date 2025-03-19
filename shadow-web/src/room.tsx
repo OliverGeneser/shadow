@@ -28,6 +28,7 @@ function Room() {
 
   const makeConnection = (id: string) => {
     store.send({ type: "setTarget", targetId: id });
+    store.send({ type: "startRTCConnection", peerId: id });
   };
 
   return (
