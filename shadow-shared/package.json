@@ -2,9 +2,12 @@
   "name": "shadow-shared",
   "version": "1.0.0",
   "private": true,
-  "main": "index.js",
+  "type": "module",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build:ts": "tsc --build",
+    "watch:ts": "tsc -w"
   },
   "packageManager": "pnpm@10.5.1",
   "devDependencies": {

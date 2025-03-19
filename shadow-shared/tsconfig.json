@@ -1,14 +1,18 @@
 {
   "compilerOptions": {
+    "composite": true,
+    "declaration": true,
+    "emitDecoratorMetadata": true,
+    "outDir": "dist",
+    "moduleResolution": "node",
+    "module": "ESNext",
     "strict": true,
     "strictNullChecks": true,
     "esModuleInterop": true,
-    "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
     "noUnusedLocals": true,
     "skipLibCheck": true,
-    "sourceMap": true,
-    "jsx": "react-jsx",
-    "moduleResolution": "node"
-  }
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
 }
