@@ -1,8 +1,7 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { v4 as uuidv4, validate as uuidValidate } from "uuid";
 import { store, useClientId, useClients } from "./stores/connection-store";
-import { useRef, useState } from "react";
 import { UiChat } from "./components/UI/chat";
 import { UiUserNetwork } from "./components/UI/userNetwork";
 import { button } from "./components/UI/button";
@@ -32,7 +31,9 @@ function Room() {
   };
 
   return (
-    <div className="relative flex h-screen w-full bg-slate-500">
+    <div className="relative flex h-screen w-full bg-gray-600 overflow-hidden">
+      <div className="absolute inset-0 bg-gradient-to-br from-gray-600 to-gray-700 transform -rotate-12 origin-bottom-left w-screen" />
+      
       <UiUserNetwork
         me={{ id: 0, userName: client }}
         users={clients.map((client: any, index) => {
@@ -70,7 +71,7 @@ function MobileChatPanel(props:{open:boolean}) {
           color: "primary",
           padding: "none",
           className:
-            "absolute top-7 left-0 -translate-x-full rounded-r-none p-2",
+            "absolute top-7 left-0 -translate-x-full rounded-r-none p-2 bg-gray-500 hover:bg-gray-400",
         })}
       >
         <FontAwesomeIcon icon={faComments} />
