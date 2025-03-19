@@ -4,8 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
+    "dev": "pnpm --stream --filter shadow-shared run build:ts && concurrently -k -p \"[{name}]\" -n \"TypeScript Shared,App\" -c \"yellow.bold,cyan.bold\" \"pnpm --filter shadow-shared run watch:ts\" \"vite\"",
+    "build": "pnpm --stream --filter shadow-shared run build:ts && tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview"
   },
@@ -22,10 +22,10 @@
     "react-qr-code": "^2.0.15",
     "react-router-dom": "^7.2.0",
     "react-use-websocket": "^4.13.0",
+    "shadow-shared": "workspace:*",
     "tailwind-variants": "^0.3.1",
     "tailwindcss": "^4.0.9",
-    "uuid": "^11.1.0",
-    "shadow-shared": "workspace:*"
+    "uuid": "^11.1.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
@@ -33,6 +33,7 @@
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
     "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.0.0",
     "eslint": "^9.21.0",
     "eslint-plugin-react-hooks": "^5.1.0",
     "eslint-plugin-react-refresh": "^0.4.19",
