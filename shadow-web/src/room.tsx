@@ -1,12 +1,7 @@
 import { useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { v4 as uuidv4, validate as uuidValidate } from "uuid";
-import {
-  store,
-  useClientId,
-  useClients,
-  useRoomId,
-} from "./stores/connection-store";
+import { store, useClientId, useClients } from "./stores/connection-store";
 import { useRef, useState } from "react";
 import { UiChat } from "./components/UI/chat";
 import { UiUserNetwork } from "./components/UI/userNetwork";
@@ -29,12 +24,8 @@ function Room() {
     store.send({ type: "setupConnection" });
   }, [id, navigate]);
 
-  const sendMessageE = () => {
-    store.trigger.sendMessage({ message: { type: "clients" } });
-  };
-
   const makeConnection = (id: string) => {
-    console.log(id);
+    store.send({ type: "setTarget", targetId: id });
   };
 
   return (
@@ -44,6 +35,7 @@ function Room() {
         users={clients.map((client: any, index) => {
           return { id: index + 1, userName: client.clientId };
         })}
+        onClick={makeConnection}
       />
 
       {window.innerWidth < 1000 ? (

@@ -12,7 +12,7 @@ type Link = {
   target: number;
 };
 
-export function UiUserNetwork(props: { me: User; users: User[] }) {
+export function UiUserNetwork(props: { me: User; users: User[];onClick:(target:string)=>void }) {
   const boxRef = useRef<HTMLDivElement>(null);
   const graphRef = useRef<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -51,6 +51,7 @@ export function UiUserNetwork(props: { me: User; users: User[] }) {
     setSelectedNode(node);
     console.log("Clicked on user ID:", node.id);
     fileInputRef.current?.click();
+    props.onClick(props.users.filter((user) => user.id === node.id)[0].userName);
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
