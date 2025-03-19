@@ -86,8 +86,8 @@ export function UiUserNetwork(props: { me: User; users: User[];onClick:(target:s
         linkWidth={1}
         onNodeClick={handleNodeClick}
         enablePanInteraction={false}
+        enableZoomInteraction={false}
         minZoom={5}
-        maxZoom={15}
         nodeCanvasObject={(node, ctx, globalScale) => {
           const label = node.userName as string;
           const fontSize = 12 / globalScale;
