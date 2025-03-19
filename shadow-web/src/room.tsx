@@ -7,6 +7,8 @@ import { UiChat } from "./components/UI/chat";
 import { UiUserNetwork } from "./components/UI/userNetwork";
 import { button } from "./components/UI/button";
 import ShareButton from "./components/UI/share";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faComments } from "@fortawesome/free-solid-svg-icons";
 
 function Room() {
   const { id } = useParams();
@@ -56,7 +58,7 @@ export default Room;
 
 function MobileChatPanel() {
   const chatRef = useRef<HTMLDivElement>(null);
-  const [isOpen, setIsOpen] = useState(true);
+  const [isOpen, setIsOpen] = useState(false);
 
   return (
     <div
@@ -66,15 +68,16 @@ function MobileChatPanel() {
       }}
     >
       <button
+        onClick={()=>setIsOpen(!isOpen)}
         className={button({
           size: "sm",
           color: "primary",
           padding: "none",
           className:
-            "absolute top-7 left-0 -translate-x-full rounded-r-none px-4 py-2",
+            "absolute top-7 left-0 -translate-x-full rounded-r-none p-2",
         })}
       >
-        Chat
+        <FontAwesomeIcon icon={faComments} />
       </button>
       <div ref={chatRef} className="h-screen py-5">
         <UiChat />

@@ -45,7 +45,7 @@ export function UiChat() {
   };
 
   return (
-    <div className="mx-auto flex h-full w-72 flex-col rounded-lg border bg-gray-50 shadow-lg sm:w-96">
+    <div className="mx-auto flex h-full w-72 flex-col rounded-l-lg border border-gray-300  bg-gray-50 shadow-lg sm:w-96">
       <div className="flex-1 overflow-y-auto p-4">
         <div className="space-y-3">
           {messages.map((msg) => (
@@ -80,7 +80,7 @@ export function UiChat() {
           <div ref={messagesEndRef} />
         </div>
       </div>
-      <div className="items-center space-x-2 border-t p-4 pt-1">
+      <div className="items-center space-x-2 border-t border-gray-300 p-4 pt-1">
         {/* display on mobile  */}
         <button
           className={button({
