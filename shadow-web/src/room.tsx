@@ -32,7 +32,7 @@ function Room() {
 
   return (
     <div className="relative flex h-screen w-full bg-gray-600 overflow-hidden">
-      <div className="absolute inset-0 bg-gradient-to-br from-gray-600 to-gray-700 transform -rotate-12 origin-bottom-left w-screen" />
+      <div className="absolute inset-0 bg-gradient-to-br from-gray-700 to-gray-600 transform -rotate-12 origin-bottom-left w-screen" />
       
       <UiUserNetwork
         me={{ id: 0, userName: client }}
@@ -42,7 +42,7 @@ function Room() {
         onClick={makeConnection}
       />
 
-      <MobileChatPanel open={window.innerWidth > 1000}/>
+      <ChatPanel open={window.innerWidth > 1000}/>
 
       <div className="absolute bottom-4 left-4">
         <ShareButton />
@@ -53,7 +53,7 @@ function Room() {
 
 export default Room;
 
-function MobileChatPanel(props:{open:boolean}) {
+function ChatPanel(props:{open:boolean}) {
   const chatRef = useRef<HTMLDivElement>(null);
   const [isOpen, setIsOpen] = useState(props.open);
 
