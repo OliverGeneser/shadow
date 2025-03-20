@@ -23,6 +23,7 @@ const signalOfferDataSchema = z
   .object({
     type: z.literal("signal-offer"),
     signal: z.unknown(),
+    to: z.string(),
   })
   .strict();
 
@@ -30,6 +31,7 @@ const signalAnswerDataSchema = z
   .object({
     type: z.literal("signal-answer"),
     signal: z.unknown(),
+    to: z.string(),
   })
   .strict();
 
@@ -37,6 +39,7 @@ const signalCandidateDataSchema = z
   .object({
     type: z.literal("signal-candidate"),
     signal: z.unknown(),
+    to: z.string(),
   })
   .strict();
 
@@ -98,6 +101,7 @@ export const clientsResponseSchema = z
 export const signalOfferResponseSchema = z
   .object({
     type: z.literal("offer"),
+    from: z.string(),
     offer: z.unknown(),
   })
   .strict();
@@ -105,6 +109,7 @@ export const signalOfferResponseSchema = z
 export const signalAnswerResponseSchema = z
   .object({
     type: z.literal("answer"),
+    from: z.string(),
     answer: z.unknown(),
   })
   .strict();
@@ -112,6 +117,7 @@ export const signalAnswerResponseSchema = z
 export const signalCandidateResponseSchema = z
   .object({
     type: z.literal("candidate"),
+    from: z.string(),
     candidate: z.unknown(),
   })
   .strict();
