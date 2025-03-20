@@ -2,26 +2,33 @@ import { FastifyPluginAsync } from "fastify";
 import { randomUUID } from "crypto";
 import WebSocket from "@fastify/websocket";
 import {
-  Data,
-  RoomData,
-  SignalOfferData,
-  SignalCandidateData,
-  SignalAnswerData,
   WebSocketMetadata,
   Rooms,
   Room,
   Metadata,
   Subset,
 } from "../../types.js";
+import { animals, uniqueNamesGenerator } from "unique-names-generator";
 import {
-  animals,
-  uniqueNamesGenerator,
-} from "unique-names-generator";
+  clientsResponseSchema,
+  createOrJoinResponse,
+  leaveResponseSchema,
+  RoomData,
+  SignalAnswerData,
+  signalAnswerResponseSchema,
+  SignalCandidateData,
+  signalCandidateResponseSchema,
+  SignalOfferData,
+  signalOfferResponseSchema,
+  WSRequest,
+  ZodError,
+} from "shadow-shared";
 
 const rooms: Rooms = new Map();
 const wsMetadata: WebSocketMetadata = new Map();
 
-const colorMap = ["Azure",
+const colorMap = [
+  "Azure",
   "Beige",
   "Brick",
   "Bronze",
@@ -41,17 +48,16 @@ const colorMap = ["Azure",
   "Sapphire",
   "Teal",
   "Walnut",
-]
+];
 
 const websocket: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
-  fastify.get("/", { websocket: true }, async function (socket, req) {
+  fastify.get("/", { websocket: true }, function (socket, req) {
     socket.on("message", (buffer) => {
       try {
-        const data: Data = JSON.parse(buffer.toString());
-
-        switch (data.type) {
+        const parsed = WSRequest.parse(JSON.parse(buffer.toString()));
+        switch (parsed.type) {
           case "create or join":
-            handleRoom(socket, data);
+            handleRoom(socket, parsed);
             break;
           case "leave":
             handleLeave(socket);
@@ -60,24 +66,34 @@ const websocket: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
             handleClients(socket);
             break;
           case "signal-offer":
-            handleSignalOffer(socket, data);
+            handleSignalOffer(socket, parsed);
             break;
           case "signal-answer":
-            handleSignalAnswer(socket, data);
+            handleSignalAnswer(socket, parsed);
             break;
           case "signal-candidate":
-            handleSignalCandidate(socket, data);
+            handleSignalCandidate(socket, parsed);
             break;
-          default:
-            socket.send("Unsupported type!");
         }
       } catch (e) {
-        console.error(e);
+        if (e instanceof ZodError) {
+          console.log(e.errors);
+        } else {
+          console.error(e);
+        }
       }
     });
 
     socket.on("close", () => {
-      handleLeave(socket);
+      try {
+        handleLeave(socket);
+      } catch (e) {
+        if (e instanceof ZodError) {
+          console.log(e.errors);
+        } else {
+          console.error(e);
+        }
+      }
     });
   });
 };
@@ -114,9 +130,11 @@ const handleRoom = (ws: WebSocket.WebSocket, data: RoomData) => {
   wsMetadata.set(ws, metadata);
 
   const message = createClientsMessage(clients);
-  sendMessageToClients(clients, ws, message);
+  const parsedMessage = clientsResponseSchema.parse(message);
+  sendMessageToClients(clients, ws, JSON.stringify(parsedMessage));
 
-  ws.send(JSON.stringify({ type: "ready", metadata }));
+  const parsed = createOrJoinResponse.parse({ type: "ready", metadata });
+  ws.send(JSON.stringify(parsed));
 };
 
 const handleLeave = (ws: WebSocket.WebSocket) => {
@@ -132,11 +150,12 @@ const handleLeave = (ws: WebSocket.WebSocket) => {
     if (clients.size === 0) {
       rooms.delete(metadata.roomId);
     } else {
-      const message = JSON.stringify({
+      const message = {
         type: "leave",
         client: metadata.clientId,
-      });
-      sendMessageToClients(clients, ws, message);
+      };
+      const parsed = leaveResponseSchema.parse(message);
+      sendMessageToClients(clients, ws, JSON.stringify(parsed));
     }
   }
   ws.close();
@@ -149,7 +168,8 @@ const handleClients = (ws: WebSocket.WebSocket) => {
   if (!clients) return;
 
   const message = createClientsMessage(clients);
-  ws.send(message);
+  const parsed = clientsResponseSchema.parse(message);
+  ws.send(JSON.stringify(parsed));
 };
 
 const createClientsMessage = (clients: Room) => {
@@ -160,10 +180,10 @@ const createClientsMessage = (clients: Room) => {
       clientsMetadata.push({ clientId: metadata.clientId });
     }
   });
-  return JSON.stringify({
+  return {
     type: "clients",
     clients: clientsMetadata,
-  });
+  };
 };
 
 const handleSignalOffer = (ws: WebSocket.WebSocket, data: SignalOfferData) => {
@@ -171,11 +191,12 @@ const handleSignalOffer = (ws: WebSocket.WebSocket, data: SignalOfferData) => {
   if (!metadata) return;
   const clients = rooms.get(metadata.roomId);
   if (!clients) return;
-  const message = JSON.stringify({
+  const message = {
     type: "offer",
     offer: data.signal,
-  });
-  sendMessageToClients(clients, ws, message);
+  };
+  const parsed = signalOfferResponseSchema.parse(message);
+  sendMessageToClients(clients, ws, JSON.stringify(parsed));
 };
 
 const handleSignalAnswer = (
@@ -186,11 +207,12 @@ const handleSignalAnswer = (
   if (!metadata) return;
   const clients = rooms.get(metadata.roomId);
   if (!clients) return;
-  const message = JSON.stringify({
+  const message = {
     type: "answer",
     answer: data.signal,
-  });
-  sendMessageToClients(clients, ws, message);
+  };
+  const parsed = signalAnswerResponseSchema.parse(message);
+  sendMessageToClients(clients, ws, JSON.stringify(parsed));
 };
 
 const handleSignalCandidate = (
@@ -201,11 +223,12 @@ const handleSignalCandidate = (
   if (!metadata) return;
   const clients = rooms.get(metadata.roomId);
   if (!clients) return;
-  const message = JSON.stringify({
+  const message = {
     type: "candidate",
     candidate: data.signal,
-  });
-  sendMessageToClients(clients, ws, message);
+  };
+  const parsed = signalCandidateResponseSchema.parse(message);
+  sendMessageToClients(clients, ws, JSON.stringify(parsed));
 };
 
 const sendMessageToClients = (
