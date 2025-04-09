@@ -1,10 +1,16 @@
 import { createStore } from "@xstate/store";
 import { useSelector } from "@xstate/store/react";
 import { serverUrl } from "../socket";
-
-export type ClientArray = {
-  clientId: string;
-}[];
+import {
+  SignalCandidateData,
+  Clients,
+  SignalAnswerData,
+  ClientsData,
+  RoomData,
+  SignalOfferData,
+  clientsSchema,
+  WSResponse,
+} from "shadow-shared";
 
 export type rtcConnectionsArray = {
   clientId: string;
@@ -26,55 +32,59 @@ const config = {
   ],
 };
 
-function getOnIceCandidate(socket, peer_id) {
-  return (event) => {
-    if (event.candidate != null) {
-      const message = {
-        to: [peer_id],
-        event: "candidate",
-        data: event.candidate,
-      };
-      socket.send(JSON.stringify(message));
-    }
-  };
-}
-
 export const store = createStore({
   context: {
     clientId: "",
     targetId: "",
     roomId: "",
-    clients: [] as ClientArray,
+    clients: [] as Clients,
     rtcConnections: {},
     webRTC: new RTCPeerConnection(config),
     socket: new WebSocket(serverUrl),
   },
   on: {
-    handleMessage: (context, event: any) => {
-      console.log(event.message);
+    handleMessage: (context, event: { message: string }) => {
       try {
-        const msg = JSON.parse(event.message.data);
+        const msg = WSResponse.parse(JSON.parse(event.message));
 
         console.log(msg);
 
         switch (msg.type) {
-          case "ready":
-            store.trigger.sendMessage({ message: { type: "clients" } });
+          case "ready": {
+            const message: ClientsData = {
+              type: "clients",
+            };
+            context.socket.send(JSON.stringify(message));
+
             return {
               ...context,
               clientId: msg.metadata.clientId,
               roomId: msg.metadata.roomId,
             };
-
+          }
           case "clients":
             return {
               ...context,
-              clients: msg.clients.filter(
-                (client) => client.clientId !== context.clientId,
-              ),
+              clients: msg.clients,
             };
-          case "offer":
+          case "offer": {
             console.log("offer, ", event);
+            context.webRTC.setRemoteDescription(msg.offer);
+            context.webRTC.createAnswer().then((answer) => {
+              context.webRTC.setLocalDescription(answer);
+
+              const message: SignalAnswerData = {
+                to: msg.from,
+                type: "signal-answer",
+                signal: answer,
+              };
+              context.socket.send(JSON.stringify(message));
+            });
+            break;
+          }
+          case "answer":
+            console.log("answer, ", event);
+            context.webRTC.setRemoteDescription(msg.answer);
             break;
 
           default:
@@ -82,16 +92,11 @@ export const store = createStore({
             console.error(msg);
         }
       } catch (e) {
-        console.log(e, event.event.data);
+        console.log(e);
       }
     },
     setTarget: (context, event: { targetId: string }) => {
       return { ...context, targetId: event.targetId };
-    },
-    sendMessage: (context, event: { type: "sendMessage"; message: any }) => {
-      console.log("Sending: ", event.message);
-      context.socket.send(JSON.stringify(event.message));
-      return { ...context };
     },
     setupSocket: (context, event: { type: "setupSocket"; roomId: string }) => {
       const tempSocket = context.socket;
@@ -100,18 +105,17 @@ export const store = createStore({
         // Handle connection open
         console.log("Connection Open!");
 
-        store.trigger.sendMessage({
-          message: {
-            type: "create or join",
-            roomId: event.roomId,
-          },
-        });
+        const message: RoomData = {
+          type: "create or join",
+          roomId: event.roomId,
+        };
+        context.socket.send(JSON.stringify(message));
       };
 
       tempSocket.onmessage = (event) =>
-        store.trigger.handleMessage({ message: event });
+        store.trigger.handleMessage({ message: event.data });
 
-      tempSocket.onclose = function (event) {
+      tempSocket.onclose = function () {
         // Handle connection close
         console.log("Connection Closed!");
       };
@@ -120,29 +124,65 @@ export const store = createStore({
     },
     startRTCConnection: (context, event: { peerId: string }) => {
       const connection = new RTCPeerConnection(config);
-      connection.onicecandidate = getOnIceCandidate(
-        context.socket,
-        event.peerId,
-      );
+      connection.onicecandidate = (e) => {
+        if (e.candidate != null) {
+          const message: SignalCandidateData = {
+            type: "signal-candidate",
+            to: event.peerId,
+            signal: e.candidate,
+          };
+          context.socket.send(JSON.stringify(message));
+        }
+      };
+
       const connections = context.rtcConnections;
-      connections[event.peerId] = connection;
+      //connections[event.peerId] = connection;
 
       console.log(connections);
       return { ...context, rtcConnections: connections };
     },
+    sendData: (context, event: { data: string }) => {
+      const sendChannel = context.webRTC.createDataChannel("sendChannel");
+
+      while (sendChannel.readyState === "connecting") {
+        console.log("Connecting datachannel");
+      }
+
+      if (sendChannel.readyState === "open") sendChannel.send(event.data);
+
+      return { ...context };
+    },
     setupConnection: (context) => {
       console.log("Setting up a connection...");
 
-      context.webRTC.onicecandidate = function handleICECandidateEvent(event) {
-        if (event.candidate) {
-          console.log(
-            "*** Outgoing ICE candidate: " + event.candidate.candidate,
-          );
+      context.webRTC.ondatachannel = (event) => {
+        const receiveChannel = event.channel;
+        receiveChannel.onmessage = (event) => {
+          console.log("message", event);
+        };
+        receiveChannel.onopen = (event) => {
+          console.log("open", event);
+        };
+        receiveChannel.onclose = (event) => {
+          console.log("close", event);
+        };
+      };
+
+      context.webRTC.onicecandidate = (e) => {
+        if (e.candidate) {
+          console.log("*** Outgoing ICE candidate: " + e.candidate.candidate);
+
+          const message: SignalCandidateData = {
+            type: "signal-candidate",
+            to: context.targetId,
+            signal: e.candidate,
+          };
+          context.socket.send(JSON.stringify(message));
         }
       };
 
       context.webRTC.oniceconnectionstatechange =
-        function handleICEConnectionStateChangeEvent(event) {
+        function handleICEConnectionStateChangeEvent() {
           console.log(
             "*** ICE connection state changed to " +
               context.webRTC.iceConnectionState,
@@ -157,7 +197,7 @@ export const store = createStore({
         };
 
       context.webRTC.onsignalingstatechange =
-        function handleSignalingStateChangeEvent(event) {
+        function handleSignalingStateChangeEvent() {
           console.log(
             "*** WebRTC signaling state changed to: " +
               context.webRTC.signalingState,
@@ -169,7 +209,7 @@ export const store = createStore({
         };
 
       context.webRTC.onicegatheringstatechange =
-        function handleICEGatheringStateChangeEvent(event) {
+        function handleICEGatheringStateChangeEvent() {
           console.log(
             "*** ICE gathering state changed to: " +
               context.webRTC.iceGatheringState,
@@ -197,14 +237,12 @@ export const store = createStore({
             // Send the offer to the remote peer.
 
             console.log("---> Sending the offer to the remote peer");
-            store.trigger.sendMessage({
-              message: {
-                name: context.clientId,
-                target: context.targetId,
-                type: "signal-offer",
-                sdp: context.webRTC.localDescription,
-              },
-            });
+            const message: SignalOfferData = {
+              type: "signal-offer",
+              to: context.targetId,
+              signal: context.webRTC.localDescription!,
+            };
+            context.socket.send(JSON.stringify(message));
           } catch (err) {
             console.error(
               "*** The following error occurred while handling the negotiationneeded event:",

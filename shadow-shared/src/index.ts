@@ -22,7 +22,7 @@ const clientsDataSchema = z
 const signalOfferDataSchema = z
   .object({
     type: z.literal("signal-offer"),
-    signal: z.unknown(),
+    signal: z.custom<RTCSessionDescription>(),
     to: z.string(),
   })
   .strict();
@@ -30,7 +30,7 @@ const signalOfferDataSchema = z
 const signalAnswerDataSchema = z
   .object({
     type: z.literal("signal-answer"),
-    signal: z.unknown(),
+    signal: z.custom<RTCSessionDescriptionInit>(),
     to: z.string(),
   })
   .strict();
@@ -38,7 +38,7 @@ const signalAnswerDataSchema = z
 const signalCandidateDataSchema = z
   .object({
     type: z.literal("signal-candidate"),
-    signal: z.unknown(),
+    signal: z.custom<RTCIceCandidate>(),
     to: z.string(),
   })
   .strict();
@@ -85,16 +85,18 @@ export const leaveResponseSchema = z
   })
   .strict();
 
+export const clientsSchema = z.array(
+  z
+    .object({
+      clientId: z.string(),
+    })
+    .strict(),
+);
+
 export const clientsResponseSchema = z
   .object({
     type: z.literal("clients"),
-    clients: z.array(
-      z
-        .object({
-          clientId: z.string(),
-        })
-        .strict(),
-    ),
+    clients: clientsSchema,
   })
   .strict();
 
@@ -102,7 +104,7 @@ export const signalOfferResponseSchema = z
   .object({
     type: z.literal("offer"),
     from: z.string(),
-    offer: z.unknown(),
+    offer: z.custom<RTCSessionDescriptionInit>(),
   })
   .strict();
 
@@ -110,7 +112,7 @@ export const signalAnswerResponseSchema = z
   .object({
     type: z.literal("answer"),
     from: z.string(),
-    answer: z.unknown(),
+    answer: z.custom<RTCSessionDescriptionInit>(),
   })
   .strict();
 
@@ -118,15 +120,26 @@ export const signalCandidateResponseSchema = z
   .object({
     type: z.literal("candidate"),
     from: z.string(),
-    candidate: z.unknown(),
+    candidate: z.custom<RTCIceCandidate>(),
   })
   .strict();
+
+export const WSResponse = z.discriminatedUnion("type", [
+  createOrJoinResponse,
+  leaveResponseSchema,
+  clientsResponseSchema,
+  signalOfferResponseSchema,
+  signalAnswerResponseSchema,
+  signalCandidateResponseSchema,
+]);
 
 export type CreateOrJoinResponse = z.infer<typeof createOrJoinResponse>;
 
 export type LeaveResponse = z.infer<typeof leaveResponseSchema>;
 
 export type ClientsResponse = z.infer<typeof clientsResponseSchema>;
+
+export type Clients = z.infer<typeof clientsSchema>;
 
 export type OfferResponse = z.infer<typeof signalOfferResponseSchema>;
 

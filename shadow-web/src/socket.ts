@@ -5,4 +5,9 @@ if (window.location.protocol === "https:") {
 }
 
 export const serverUrl =
-  scheme + "://" + window.location.hostname + ":3005/websocket";
+  scheme +
+  "://" +
+  window.location.hostname +
+  ":" +
+  "3005" + //import.meta.env.port +
+  "/websocket";

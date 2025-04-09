@@ -9,7 +9,7 @@ import ShareButton from "./components/UI/share";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faComments } from "@fortawesome/free-solid-svg-icons";
 
-function Room() {
+function RoomView() {
   const { id } = useParams();
   const navigate = useNavigate();
   const client = useClientId();
@@ -22,18 +22,21 @@ function Room() {
       return;
     }
     store.send({ type: "setupSocket", roomId: id });
-    store.send({ type: "setupConnection" });
   }, [id, navigate]);
 
   const makeConnection = (id: string) => {
     store.send({ type: "setTarget", targetId: id });
-    store.send({ type: "startRTCConnection", peerId: id });
+    store.send({ type: "setupConnection" });
+  };
+
+  const sendData = () => {
+    store.send({ type: "sendData", data: "tesxtt" });
   };
 
   return (
-    <div className="relative flex h-screen w-full bg-gray-600 overflow-hidden">
-      <div className="absolute inset-0 bg-gradient-to-br from-gray-700 to-gray-600 transform -rotate-12 origin-bottom-left w-screen" />
-      
+    <div className="relative flex h-screen w-full overflow-hidden bg-gray-600">
+      <div className="absolute inset-0 w-screen origin-bottom-left -rotate-12 transform bg-gradient-to-br from-gray-700 to-gray-600" />
+
       <UiUserNetwork
         me={{ id: 0, userName: client }}
         users={clients.map((client: any, index) => {
@@ -42,7 +45,9 @@ function Room() {
         onClick={makeConnection}
       />
 
-      <ChatPanel open={window.innerWidth > 1000}/>
+      <button onClick={sendData}>send test</button>
+
+      <ChatPanel open={window.innerWidth > 1000} />
 
       <div className="absolute bottom-4 left-4">
         <ShareButton />
@@ -51,9 +56,9 @@ function Room() {
   );
 }
 
-export default Room;
+export default RoomView;
 
-function ChatPanel(props:{open:boolean}) {
+function ChatPanel(props: { open: boolean }) {
   const chatRef = useRef<HTMLDivElement>(null);
   const [isOpen, setIsOpen] = useState(props.open);
 
@@ -65,13 +70,13 @@ function ChatPanel(props:{open:boolean}) {
       }}
     >
       <button
-        onClick={()=>setIsOpen(!isOpen)}
+        onClick={() => setIsOpen(!isOpen)}
         className={button({
           size: "sm",
           color: "primary",
           padding: "none",
           className:
-            "absolute top-7 left-0 -translate-x-full rounded-r-none p-2 bg-gray-500 hover:bg-gray-400",
+            "absolute top-7 left-0 -translate-x-full rounded-r-none bg-gray-500 p-2 hover:bg-gray-400",
         })}
       >
         <FontAwesomeIcon icon={faComments} />
