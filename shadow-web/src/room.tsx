@@ -16,22 +16,20 @@ function RoomView() {
   const clients = useClients();
 
   useEffect(() => {
-    if (!uuidValidate(id)) {
+    if (!uuidValidate(id) || id === undefined) {
       const newRoomId = uuidv4();
       navigate(`/${newRoomId}`, { replace: true });
       return;
+    } else {
+      store.send({ type: "setupSocket", roomId: id });
     }
-    store.send({ type: "setupSocket", roomId: id });
   }, [id, navigate]);
 
   const makeConnection = (id: string) => {
-    store.send({ type: "setTarget", targetId: id });
-    store.send({ type: "setupConnection" });
+    store.send({ type: "setupConnection", peerId: id });
   };
 
-  const sendData = () => {
-    store.send({ type: "sendData", data: "tesxtt" });
-  };
+  const sendData = () => {};
 
   return (
     <div className="relative flex h-screen w-full overflow-hidden bg-gray-600">

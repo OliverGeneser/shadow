@@ -2,6 +2,8 @@
 import { useEffect, useRef, useState } from "react";
 import ForceGraph2D from "react-force-graph-2d";
 
+import { store } from "../../stores/connection-store";
+
 type User = {
   id: number;
   userName: string;
@@ -61,6 +63,13 @@ export function UiUserNetwork(props: {
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (selectedNode) {
+      store.send({
+        type: "sendData",
+        data: "test",
+        peerId: selectedNode.userName,
+      });
+    }
     const files = event.target.files;
     if (files && files.length > 0 && selectedNode) {
       console.log("Selected files:", files);

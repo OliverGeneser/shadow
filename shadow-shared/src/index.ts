@@ -30,7 +30,7 @@ const signalOfferDataSchema = z
 const signalAnswerDataSchema = z
   .object({
     type: z.literal("signal-answer"),
-    signal: z.custom<RTCSessionDescriptionInit>(),
+    signal: z.custom<RTCSessionDescription>(),
     to: z.string(),
   })
   .strict();
