@@ -8,20 +8,23 @@ import {
   ClientsData,
   RoomData,
   SignalOfferData,
-  clientsSchema,
   WSResponse,
 } from "shadow-shared";
 
-export type rtcConnectionsArray = {
+export interface rtcConnectionsArray {
   clientId: string;
-};
-interface Connections {
-  [key: string]: {
-    webrtc: RTCPeerConnection;
-    dataChannel: RTCDataChannel | undefined;
-  };
 }
 
+interface WebRTCConnections {
+  [key: string]: RTCPeerConnection;
+}
+interface DataChannelConnections {
+  [key: string]: RTCDataChannel;
+}
+interface ReceivedFiles {
+  name: string;
+  url: string;
+}
 export enum ReadyState {
   UNINSTANTIATED = -1,
   CONNECTING = 0,
@@ -42,7 +45,15 @@ export const store = createStore({
     clientId: "",
     roomId: "",
     clients: [] as Clients,
-    connections: {} as Connections,
+    receivedFiles: [] as ReceivedFiles[],
+    receiveBuffers: {} as { [id: string]: BlobPart[] },
+    receiveSizes: {} as { [id: string]: number },
+    receiveFiles: {} as {
+      [id: string]: { name: string; size: number; type: string } | undefined;
+    },
+    webrtcConnections: {} as WebRTCConnections,
+    fileChannelConnections: {} as DataChannelConnections,
+    chatChannelConnections: {} as DataChannelConnections,
     socket: new WebSocket(serverUrl),
   },
   on: {
@@ -63,88 +74,124 @@ export const store = createStore({
               roomId: msg.metadata.roomId,
             };
           }
+
           case "clients":
             return {
               ...context,
               clients: msg.clients,
             };
-          case "offer": {
-            console.log("offer, ", msg);
 
-            const localPeer = new RTCPeerConnection(config);
+          case "offer": {
+            let localPeer;
+            if (context.webrtcConnections[msg.from]) {
+              localPeer = context.webrtcConnections[msg.from];
+            } else {
+              localPeer = new RTCPeerConnection(config);
+            }
+
+            localPeer.onicecandidate = ({ candidate }) => {
+              if (candidate) {
+                const message: SignalCandidateData = {
+                  type: "signal-candidate",
+                  to: msg.from,
+                  signal: candidate,
+                };
+                context.socket.send(JSON.stringify(message));
+              }
+            };
+            const func = async () => {
+              await localPeer.setRemoteDescription(msg.offer);
+              await localPeer.setLocalDescription(
+                await localPeer.createAnswer(),
+              );
+              if (localPeer.localDescription !== null) {
+                const message: SignalAnswerData = {
+                  type: "signal-answer",
+                  to: msg.from,
+                  signal: localPeer.localDescription,
+                };
+                context.socket.send(JSON.stringify(message));
+              }
+            };
+
+            func();
 
             localPeer.ondatachannel = (e) => {
-              console.log("remote", e);
               const dataChannel = e.channel;
               dataChannel.binaryType = "arraybuffer";
               dataChannel.bufferedAmountLowThreshold = 0;
-              dataChannel.onmessage = (msg) => onReceiveMessageCallback(msg);
-              dataChannel.onopen = () => console.log("Connected to peer.");
-            };
+              dataChannel.onmessage = (e) =>
+                store.send({
+                  type: "onReceiveMessageCallback",
+                  peerId: msg.from,
+                  event: e,
+                });
 
-            localPeer.setRemoteDescription(msg.offer);
-            if (localPeer.localDescription === null) {
-              localPeer
-                .createAnswer()
-                .then((answer) => localPeer.setLocalDescription(answer));
-            }
+              dataChannel.onopen = () =>
+                console.log("Connected to sender peer.");
 
-            localPeer.onicecandidate = () => {
-              if (localPeer.localDescription !== null) {
-                console.log(localPeer.localDescription);
-                const message: SignalAnswerData = {
-                  to: msg.from,
-                  type: "signal-answer",
-                  signal: localPeer.localDescription,
-                };
-                context.socket.send(JSON.stringify(message));
-              }
+              store.send({
+                type: "setFileChannelConnection",
+                peerId: msg.from,
+                dataChannel: dataChannel,
+              });
             };
 
             return {
               ...context,
-              connections: {
-                ...context.connections,
-                [msg.from]: { webrtc: localPeer, dataChannel: undefined },
+              webrtcConnections: {
+                ...context.webrtcConnections,
+                [msg.from]: localPeer,
               },
             };
           }
+
           case "answer": {
-            console.log("answer, ", msg);
-            const localPeer = context.connections[msg.from].webrtc;
+            let localPeer;
+            if (context.webrtcConnections[msg.from]) {
+              localPeer = context.webrtcConnections[msg.from];
+            } else {
+              return { ...context };
+            }
 
             localPeer.setRemoteDescription(msg.answer);
 
-            if (localPeer.localDescription == null) {
-              localPeer
-                .createAnswer()
-                .then((answer) => localPeer.setLocalDescription(answer));
-            }
-            localPeer.onicecandidate = () => {
-              if (localPeer.localDescription !== null) {
-                const message: SignalAnswerData = {
-                  to: msg.from,
-                  type: "signal-answer",
-                  signal: localPeer.localDescription,
-                };
-                context.socket.send(JSON.stringify(message));
-              }
-            };
-
             return {
               ...context,
-              connections: {
-                ...context.connections,
-                [msg.from]: {
-                  webrtc: localPeer,
-                  dataChannel: context.connections[msg.from].dataChannel,
-                },
+              webrtcConnections: {
+                ...context.webrtcConnections,
+                [msg.from]: localPeer,
               },
             };
           }
-          case "leave":
-            console.log(msg);
-            break;
+
+          case "candidate": {
+            let localPeer;
+            if (context.webrtcConnections[msg.from]) {
+              localPeer = context.webrtcConnections[msg.from];
+            } else {
+              return { ...context };
+            }
+
+            localPeer.addIceCandidate(msg.candidate);
+
+            return {
+              ...context,
+              webrtcConnections: {
+                ...context.webrtcConnections,
+                [msg.from]: localPeer,
+              },
+            };
+          }
+
+          case "leave": {
+            return {
+              ...context,
+              clients: context.clients.filter(
+                (client) => client.clientId !== msg.client,
+              ),
+            };
+          }
 
           default:
             console.error("Unknown message received:");
@@ -153,6 +200,18 @@ export const store = createStore({
       } catch (e) {
         console.log(e);
       }
+    },
+    setFileChannelConnection: (
+      context,
+      event: { peerId: string; dataChannel: RTCDataChannel },
+    ) => {
+      return {
+        ...context,
+        fileChannelConnections: {
+          ...context.fileChannelConnections,
+          [event.peerId]: event.dataChannel,
+        },
+      };
     },
     setupSocket: (context, event: { type: "setupSocket"; roomId: string }) => {
       const tempSocket = context.socket;
@@ -176,8 +235,13 @@ export const store = createStore({
 
       return { ...context, socket: tempSocket, roomId: event.roomId };
     },
-    sendData: (context, event: { peerId: string; data: string }) => {
-      const dataChannel = context.connections[event.peerId].dataChannel;
+    sendData: (context, event: { peerId: string; data: File }) => {
+      let dataChannel;
+      if (context.fileChannelConnections[event.peerId]) {
+        dataChannel = context.fileChannelConnections[event.peerId];
+      } else {
+        return context;
+      }
       if (dataChannel) {
         dataChannel.send(
           JSON.stringify({
@@ -187,50 +251,221 @@ export const store = createStore({
           }),
         );
       }
-      return { ...context };
+      return {
+        ...context,
+        fileChannelConnections: {
+          ...context.fileChannelConnections,
+          [event.peerId]: dataChannel,
+        },
+      };
     },
+    newFile: (context, event: { fileURL: string; fileName: string }) => {
+      return {
+        ...context,
+        receivedFiles: [
+          ...context.receivedFiles,
+          { url: event.fileURL, name: event.fileName },
+        ],
+      };
+    },
+    sendFile: (context, event: { peerId: string; file: File }) => {
+      let dataChannel;
+      if (context.fileChannelConnections[event.peerId]) {
+        dataChannel = context.fileChannelConnections[event.peerId];
+      } else {
+        return context;
+      }
+      if (dataChannel) {
+        dataChannel.send(
+          JSON.stringify({
+            name: event.file.name,
+            size: event.file.size,
+            type: event.file.type,
+          }),
+        );
+      }
+
+      let offset = 0;
+      const maxChunkSize = 16384;
+
+      console.log(dataChannel.bufferedAmountLowThreshold);
+
+      event.file.arrayBuffer().then((buffer) => {
+        const send = () => {
+          while (buffer.byteLength) {
+            if (
+              dataChannel.bufferedAmount >
+              dataChannel.bufferedAmountLowThreshold
+            ) {
+              dataChannel.onbufferedamountlow = () => {
+                dataChannel.onbufferedamountlow = null;
+                send();
+              };
+              return;
+            }
+            const chunk = buffer.slice(0, maxChunkSize);
+            buffer = buffer.slice(maxChunkSize, buffer.byteLength);
+            dataChannel.send(chunk);
+            offset += maxChunkSize;
+            console.log("Sent " + offset + " bytes.");
+            console.log(((offset / event.file.size) * 100).toFixed(1) + "%");
+          }
+        };
+
+        send();
+      });
+      return {
+        ...context,
+        fileChannelConnections: {
+          ...context.fileChannelConnections,
+          [event.peerId]: dataChannel,
+        },
+      };
+    },
+
+    pushToReceiveBuffer: (
+      context,
+      event: { peerId: string; blob: BlobPart },
+    ) => {
+      return {
+        ...context,
+        receiveBuffers: {
+          ...context.receiveBuffers,
+          [event.peerId]: [...context.receiveBuffers[event.peerId], event.blob],
+        },
+      };
+    },
+    onReceiveMessageCallback: (
+      context,
+      event: { peerId: string; event: MessageEvent },
+    ) => {
+      const receiveBuffer = context.receiveBuffers[event.peerId] ?? [];
+      let receivedSize = context.receiveSizes[event.peerId] ?? 0;
+      let receivedFile = context.receiveFiles[event.peerId] ?? undefined;
+      console.log(receivedFile);
+
+      if (receivedFile == undefined) {
+        const file = JSON.parse(event.event.data);
+        console.log(file);
+        receivedFile = file;
+        return {
+          ...context,
+          receiveFiles: {
+            ...context.receiveFiles,
+            [event.peerId]: receivedFile,
+          },
+        };
+      }
+      receiveBuffer.push(event.event.data);
+
+      receivedSize += event.event.data.byteLength;
+      console.log(
+        "Receive: " +
+          ((receivedSize / receivedFile.size) * 100).toFixed(1) +
+          "%",
+      );
+
+      if (receivedSize == receivedFile["size"]) {
+        const blob = new Blob(context.receiveBuffers[event.peerId], {
+          type: receivedFile["type"],
+        });
+        const fileURL = URL.createObjectURL(blob);
+        return {
+          ...context,
+          receiveBuffers: {
+            ...context.receiveBuffers,
+            [event.peerId]: [],
+          },
+          receiveSizes: {
+            ...context.receiveSizes,
+            [event.peerId]: 0,
+          },
+          receiveFiles: {
+            ...context.receiveFiles,
+            [event.peerId]: undefined,
+          },
+          receivedFiles: [
+            ...context.receivedFiles,
+            { name: receivedFile.name, url: fileURL },
+          ],
+        };
+      }
+
+      return {
+        ...context,
+        receiveBuffers: {
+          ...context.receiveBuffers,
+          [event.peerId]: receiveBuffer,
+        },
+        receiveSizes: {
+          ...context.receiveSizes,
+          [event.peerId]: receivedSize,
+        },
+      };
+    },
+
     setupConnection: (context, event: { peerId: string }) => {
       console.log("Setting up a connection...");
+      let localPeer;
+      if (context.webrtcConnections[event.peerId]) {
+        return context;
+      } else {
+        localPeer = new RTCPeerConnection(config);
+      }
 
-      const localpeer = new RTCPeerConnection(config);
-
-      const dataChannel = localpeer.createDataChannel("dataChannel");
+      const dataChannel = localPeer.createDataChannel("fileChannel");
       dataChannel.binaryType = "arraybuffer";
-      dataChannel.onmessage = (msg: unknown) => onReceiveMessageCallback(msg);
+      dataChannel.onmessage = (e) =>
+        store.send({
+          type: "onReceiveMessageCallback",
+          peerId: event.peerId,
+          event: e,
+        });
       dataChannel.bufferedAmountLowThreshold = 0;
-      dataChannel.onopen = () => console.log("Connected to peer.");
+      dataChannel.onopen = () => console.log("Connected to receiver peer.");
 
-      localpeer.onicecandidate = () => {
-        if (localpeer.localDescription !== null) {
-          const message: SignalOfferData = {
-            type: "signal-offer",
+      localPeer.onicecandidate = ({ candidate }) => {
+        if (candidate) {
+          const message: SignalCandidateData = {
+            type: "signal-candidate",
             to: event.peerId,
-            signal: localpeer.localDescription,
+            signal: candidate,
           };
           context.socket.send(JSON.stringify(message));
         }
       };
-      const func = async () => {
-        const localOffer = await localpeer.createOffer();
-        localpeer.setLocalDescription(new RTCSessionDescription(localOffer));
+
+      localPeer.onnegotiationneeded = async () => {
+        try {
+          await localPeer.setLocalDescription(await localPeer.createOffer());
+
+          if (localPeer.localDescription !== null) {
+            const message: SignalOfferData = {
+              type: "signal-offer",
+              to: event.peerId,
+              signal: localPeer.localDescription,
+            };
+            context.socket.send(JSON.stringify(message));
+          }
+        } catch (err) {
+          console.error(err);
+        }
       };
-      func();
 
       return {
         ...context,
-        connections: {
-          ...context.connections,
-          [event.peerId]: { webrtc: localpeer, dataChannel: dataChannel },
+        webrtcConnections: {
+          ...context.webrtcConnections,
+          [event.peerId]: localPeer,
+        },
+        fileChannelConnections: {
+          ...context.fileChannelConnections,
+          [event.peerId]: dataChannel,
         },
       };
     },
   },
 });
-
-function onReceiveMessageCallback(event: unknown) {
-  console.log("MESSAGEEEEEE");
-  console.log(event);
-}
 
 export const useClientId = () =>
   useSelector(store, (state) => state.context.clientId);
@@ -240,3 +475,5 @@ export const useClients = () =>
   useSelector(store, (state) => state.context.clients);
 export const useSocketState = () =>
   useSelector(store, (state) => state.context.socket.readyState);
+export const useNewFiles = () =>
+  useSelector(store, (state) => state.context.receivedFiles);

@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import ForceGraph2D, { NodeObject } from "react-force-graph-2d";
 
-import { store } from "../../stores/connection-store";
+import { store, useNewFiles } from "../../stores/connection-store";
 
 type User = {
   id: number;
@@ -13,6 +13,19 @@ type Link = {
   source: number;
   target: number;
 };
+
+export function Downloads() {
+  const files = useNewFiles();
+  return (
+    <div>
+      {files.map((file) => (
+        <a key={file.url} href={file.name} download={file.name}>
+          {file.url}
+        </a>
+      ))}
+    </div>
+  );
+}
 
 export function UiUserNetwork(props: {
   me: User;
@@ -64,18 +77,16 @@ export function UiUserNetwork(props: {
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (selectedNode) {
-      store.send({
-        type: "sendData",
-        data: "test",
-        peerId: selectedNode.userName,
-      });
-    }
     const files = event.target.files;
     if (files && files.length > 0 && selectedNode) {
       console.log("Selected files:", files);
       console.log("Upload files to user ID:", selectedNode.id);
       // TODO: Handle file upload logic here
+      store.send({
+        type: "sendFile",
+        file: files[0],
+        peerId: selectedNode.userName,
+      });
     }
   };
 
@@ -91,7 +102,7 @@ export function UiUserNetwork(props: {
         onChange={handleFileChange}
         multiple
       />
-
+      <Downloads />
       <ForceGraph2D
         ref={graphRef}
         graphData={graphData}

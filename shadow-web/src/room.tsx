@@ -29,8 +29,6 @@ function RoomView() {
     store.send({ type: "setupConnection", peerId: id });
   };
 
-  const sendData = () => {};
-
   return (
     <div className="relative flex h-screen w-full overflow-hidden bg-gray-600">
       <div className="absolute inset-0 w-screen origin-bottom-left -rotate-12 transform bg-gradient-to-br from-gray-700 to-gray-600" />
@@ -42,8 +40,6 @@ function RoomView() {
         })}
         onClick={makeConnection}
       />
-
-      <button onClick={sendData}>send test</button>
 
       <ChatPanel open={window.innerWidth > 1000} />
 
