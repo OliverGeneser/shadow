@@ -7,6 +7,7 @@ import {
   Room,
   Metadata,
   Subset,
+  ClientsInformation,
 } from "../../types.js";
 import { animals, uniqueNamesGenerator } from "unique-names-generator";
 import {
@@ -129,9 +130,10 @@ const handleRoom = (ws: WebSocket.WebSocket, data: RoomData) => {
   const metadata = { clientId, roomId };
   wsMetadata.set(ws, metadata);
 
-  const message = createClientsMessage(clients, ws);
-  const parsedMessage = clientsResponseSchema.parse(message);
-  sendMessageToClients(clients, ws, JSON.stringify(parsedMessage));
+  if (clients.size > 1) {
+    const clientsInformation = getClientInformationOfAllClients(clients);
+    sendClientIdsToAllClients(clients, ws, clientsInformation);
+  }
 
   const parsed = createOrJoinResponse.parse({ type: "ready", metadata });
   ws.send(JSON.stringify(parsed));
@@ -251,6 +253,30 @@ const sendMessageToClients = (
     }
   });
 };
+
+const getClientInformationOfAllClients = (clients: Room) => {
+  const clientsInformation: ClientsInformation = [];
+  clients.forEach((client) => {
+    const metadata = wsMetadata.get(client)
+    if (!metadata) return;
+    clientsInformation.push({ clientId: metadata.clientId, ws: client})
+  })
+
+  return clientsInformation
+}
+
+const sendClientIdsToAllClients = (clients: Room, ws: WebSocket.WebSocket , clientsInfromation: ClientsInformation) => {
+  clients.forEach((client) => {
+    if (client !== ws) {
+      const message = {
+        type: "clients",
+        clients: clientsInfromation.filter((ci) => ci.ws !== client).map((ci) => { return { clientId: ci.clientId } }),
+      }
+      const parsedMessage = clientsResponseSchema.parse(message);
+      client.send(JSON.stringify(parsedMessage))
+    }
+  })
+}
 
 const sendMessageToClient = (clients: Room, to: string, message: string) => {
   clients.forEach((client) => {
