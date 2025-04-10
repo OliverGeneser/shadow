@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import ForceGraph2D from "react-force-graph-2d";
+import ForceGraph2D, { NodeObject } from "react-force-graph-2d";
 
 import { store } from "../../stores/connection-store";
 
@@ -28,6 +28,7 @@ export function UiUserNetwork(props: {
     { id: props.me.id, userName: props.me.userName },
     ...props.users,
   ];
+  // clientId exists
   const links: Link[] = props.users.map((user) => ({
     source: props.me.id,
     target: user.id,
@@ -99,6 +100,7 @@ export function UiUserNetwork(props: {
         nodeVal={(node) => (node.id === props.me.id ? 10 : 8)}
         linkColor={() => "rgba(255, 255, 255, 0.7)"}
         linkWidth={1}
+        linkCanvasObjectMode="replace"
         onNodeClick={handleNodeClick}
         enablePanInteraction={false}
         enableZoomInteraction={false}
@@ -107,7 +109,7 @@ export function UiUserNetwork(props: {
           const label = node.userName as string;
           const fontSize = 12 / globalScale;
           const [color, animal] = label.split(" ");
-          // Define a color map to convert text to actual color codes
+
           const colorMap: { [key: string]: string } = {
             Azure: "#007FFF",
             Beige: "#A89C8C",
@@ -142,9 +144,48 @@ export function UiUserNetwork(props: {
           ctx.font = `italic ${fontSize * 0.8}px Sans-Serif`;
           ctx.fillStyle = "#fff";
           ctx.textAlign = "center";
-          ctx.fillText(`(${color})`, node.x!, node.y! - 2);
-          ctx.font = `bold ${fontSize}px Sans-Serif`;
-          ctx.fillText(animal, node.x!, node.y! + 1);
+          if(node.id===props.me.id){
+            ctx.fillText(`(${color})`, node.x!, node.y! - 2);
+            ctx.font = ` ${fontSize * 0.9}px Sans-Serif`;
+            ctx.fillText("You", node.x!, node.y! +6);
+            ctx.font = `bold ${fontSize}px Sans-Serif`;
+            ctx.fillText(animal, node.x!, node.y! + 1);
+          }else{
+            ctx.fillText(`(${color})`, node.x!, node.y! - 2);
+            ctx.font = `bold ${fontSize}px Sans-Serif`;
+            ctx.fillText(animal, node.x!, node.y! + 1);
+          }
+        }}
+        linkCanvasObject={(link, ctx, globalScale) => {
+          const fontSize = Math.max(12 / globalScale, 3); // Ensure text remains readable
+        
+          const source = link.source as NodeObject<User>;
+          const target = link.target as NodeObject<User>;
+        
+          // Ensure both nodes have positions before rendering
+          if (!source.x || !source.y || !target.x || !target.y) return;
+        
+          const midX = (source.x + target.x) / 2;
+          const midY = (source.y + target.y) / 2;
+        
+          ctx.save();
+        
+          // **Step 1: Draw the Link**
+          ctx.beginPath();
+          ctx.moveTo(source.x, source.y);
+          ctx.lineTo(target.x, target.y);
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.7)";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        
+          // **Step 2: Draw the Text on the Link**
+          ctx.font = `${fontSize}px Sans-Serif`;
+          ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText("Connection", midX, midY);
+        
+          ctx.restore();
         }}
       />
     </div>
