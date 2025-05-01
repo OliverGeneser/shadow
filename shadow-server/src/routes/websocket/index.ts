@@ -12,6 +12,7 @@ import {
 import { animals, uniqueNamesGenerator } from "unique-names-generator";
 import {
   clientsResponseSchema,
+  colorMap,
   createOrJoinResponse,
   leaveResponseSchema,
   RoomData,
@@ -27,29 +28,6 @@ import {
 
 const rooms: Rooms = new Map();
 const wsMetadata: WebSocketMetadata = new Map();
-
-const colorMap = [
-  "Azure",
-  "Beige",
-  "Brick",
-  "Bronze",
-  "Charcoal",
-  "Coral",
-  "Cyan",
-  "Emerald",
-  "Fawn",
-  "Indigo",
-  "Amethyst",
-  "Jade",
-  "Lavender",
-  "Maroon",
-  "Olive",
-  "Peach",
-  "Rosewood",
-  "Sapphire",
-  "Teal",
-  "Walnut",
-];
 
 const websocket: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
   fastify.get("/", { websocket: true }, function (socket, req) {
@@ -112,7 +90,7 @@ const handleRoom = (ws: WebSocket.WebSocket, data: RoomData) => {
   if (!clients) return;
   clients.add(ws);
   let clientId = uniqueNamesGenerator({
-    dictionaries: [colorMap, animals],
+    dictionaries: [Object.keys(colorMap), animals],
     separator: " ",
     style: "capital",
     length: 2,
@@ -120,7 +98,7 @@ const handleRoom = (ws: WebSocket.WebSocket, data: RoomData) => {
 
   while (clientIdExists(clients, clientId)) {
     clientId = uniqueNamesGenerator({
-      dictionaries: [colorMap, animals],
+      dictionaries: [Object.keys(colorMap), animals],
       separator: " ",
       style: "capital",
       length: 2,

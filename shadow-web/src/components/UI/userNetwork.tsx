@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import ForceGraph2D, { NodeObject } from "react-force-graph-2d";
 
 import { store, useNewFiles } from "../../stores/connection-store";
+import { colorMap } from "shadow-shared";
 
 type User = {
   id: number;
@@ -120,29 +121,6 @@ export function UiUserNetwork(props: {
           const label = node.userName as string;
           const fontSize = 12 / globalScale;
           const [color, animal] = label.split(" ");
-
-          const colorMap: { [key: string]: string } = {
-            Azure: "#007FFF",
-            Beige: "#A89C8C",
-            Brick: "#CB4154",
-            Bronze: "#CD7F32",
-            Charcoal: "#36454F",
-            Coral: "#FF6F61",
-            Cyan: "#00AEEF",
-            Emerald: "#50C878",
-            Fawn: "#C89B6E",
-            Indigo: "#4B0082",
-            Jade: "#00A86B",
-            Lavender: "#916BBF",
-            Maroon: "#800000",
-            Olive: "#5A6E41",
-            Peach: "#E9967A",
-            Rosewood: "#65000B",
-            Sapphire: "#0F52BA",
-            Teal: "#008080",
-            Walnut: "#5D3A1A",
-            Amethyst: "#9966CC",
-          };
 
           const circleColor = colorMap[color] || "#3b82f6";
 

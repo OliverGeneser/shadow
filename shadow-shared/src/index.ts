@@ -148,3 +148,26 @@ export type AnswerResponse = z.infer<typeof signalAnswerResponseSchema>;
 export type CandidateResponse = z.infer<typeof signalCandidateResponseSchema>;
 
 export const ZodError = z.ZodError;
+
+export const colorMap: { [key: string]: string } = {
+  Azure: "#007FFF",
+  Beige: "#A89C8C",
+  Brick: "#CB4154",
+  Bronze: "#CD7F32",
+  Charcoal: "#36454F",
+  Coral: "#FF6F61",
+  Cyan: "#00AEEF",
+  Emerald: "#50C878",
+  Fawn: "#C89B6E",
+  Indigo: "#4B0082",
+  Jade: "#00A86B",
+  Lavender: "#916BBF",
+  Maroon: "#800000",
+  Olive: "#5A6E41",
+  Peach: "#E9967A",
+  Rosewood: "#65000B",
+  Sapphire: "#0F52BA",
+  Teal: "#008080",
+  Walnut: "#5D3A1A",
+  Amethyst: "#9966CC",
+};
