@@ -105,7 +105,7 @@ const handleRoom = (ws: WebSocket.WebSocket, data: RoomData) => {
     });
   }
 
-  const metadata = { clientId, roomId };
+  const metadata = { clientId, roomId, publicKey: data.publicKey };
   wsMetadata.set(ws, metadata);
 
   if (clients.size > 1) {
@@ -113,7 +113,10 @@ const handleRoom = (ws: WebSocket.WebSocket, data: RoomData) => {
     sendClientIdsToAllClients(clients, ws, clientsInformation);
   }
 
-  const parsed = createOrJoinResponse.parse({ type: "ready", metadata });
+  const parsed = createOrJoinResponse.parse({
+    type: "ready",
+    metadata: { clientId: metadata.clientId, roomId: metadata.roomId },
+  });
   ws.send(JSON.stringify(parsed));
 };
 
@@ -151,12 +154,15 @@ const handleClients = (ws: WebSocket.WebSocket) => {
 };
 
 const createClientsMessage = (clients: Room, ws: WebSocket.WebSocket) => {
-  const clientsMetadata: Subset<Metadata, { clientId: string }>[] = [];
+  const clientsMetadata: Omit<Metadata, "roomId">[] = [];
   clients.forEach((client) => {
     if (client !== ws) {
       const metadata = wsMetadata.get(client);
       if (metadata) {
-        clientsMetadata.push({ clientId: metadata.clientId });
+        clientsMetadata.push({
+          clientId: metadata.clientId,
+          publicKey: metadata.publicKey,
+        });
       }
     }
   });
@@ -235,26 +241,38 @@ const sendMessageToClients = (
 const getClientInformationOfAllClients = (clients: Room) => {
   const clientsInformation: ClientsInformation = [];
   clients.forEach((client) => {
-    const metadata = wsMetadata.get(client)
+    const metadata = wsMetadata.get(client);
     if (!metadata) return;
-    clientsInformation.push({ clientId: metadata.clientId, ws: client})
-  })
+    clientsInformation.push({
+      clientId: metadata.clientId,
+      ws: client,
+      publicKey: metadata.publicKey,
+    });
+  });
 
-  return clientsInformation
-}
+  return clientsInformation;
+};
 
-const sendClientIdsToAllClients = (clients: Room, ws: WebSocket.WebSocket , clientsInfromation: ClientsInformation) => {
+const sendClientIdsToAllClients = (
+  clients: Room,
+  ws: WebSocket.WebSocket,
+  clientsInfromation: ClientsInformation,
+) => {
   clients.forEach((client) => {
     if (client !== ws) {
       const message = {
         type: "clients",
-        clients: clientsInfromation.filter((ci) => ci.ws !== client).map((ci) => { return { clientId: ci.clientId } }),
-      }
+        clients: clientsInfromation
+          .filter((ci) => ci.ws !== client)
+          .map((ci) => {
+            return { clientId: ci.clientId, publicKey: ci.publicKey };
+          }),
+      };
       const parsedMessage = clientsResponseSchema.parse(message);
-      client.send(JSON.stringify(parsedMessage))
+      client.send(JSON.stringify(parsedMessage));
     }
-  })
-}
+  });
+};
 
 const sendMessageToClient = (clients: Room, to: string, message: string) => {
   clients.forEach((client) => {
