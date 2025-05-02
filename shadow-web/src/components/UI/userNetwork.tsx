@@ -67,6 +67,18 @@ export function UiUserNetwork(props: {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  useEffect(() => {
+    if (!graphRef.current) return;
+    graphRef.current.d3Force('charge').strength(-100);
+  
+    const collisionForce = graphRef.current.d3Force('collision');
+    if (collisionForce) {
+      collisionForce
+        .radius((node: any) => (node.id === props.me.id ? 10 : 8))
+        .strength(1);
+    }
+  }, [graphData]);
+
   const handleNodeClick = (node: any) => {
     if (node.id === props.me.id) return;
     setSelectedNode(node);
@@ -123,10 +135,9 @@ export function UiUserNetwork(props: {
           const [color, animal] = label.split(" ");
 
           const circleColor = colorMap[color] || "#3b82f6";
-
           const avatarSize = node.id === props.me.id ? 10 : 8;
           ctx.beginPath();
-          ctx.arc(node.x!, node.y!, avatarSize, 0, 2 * Math.PI, false);
+          ctx.arc(node.x!, node.y!, avatarSize, 0, 2 * Math.PI);
           ctx.fillStyle = circleColor;
           ctx.fill();
 
