@@ -6,7 +6,6 @@ import {
   Rooms,
   Room,
   Metadata,
-  Subset,
   ClientsInformation,
 } from "../../types.js";
 import { animals, uniqueNamesGenerator } from "unique-names-generator";

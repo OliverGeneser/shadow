@@ -4,7 +4,7 @@ const roomDataSchema = z
   .object({
     type: z.literal("create or join"),
     roomId: z.string().optional(),
-    publicKey: z.string(),
+    publicKey: z.custom<CryptoKey>(),
   })
   .strict();
 
@@ -90,7 +90,7 @@ export const clientsSchema = z.array(
   z
     .object({
       clientId: z.string(),
-      publicKey: z.string(),
+      publicKey: z.custom<CryptoKey>(),
     })
     .strict(),
 );
@@ -173,4 +173,3 @@ export const colorMap: { [key: string]: string } = {
   Walnut: "#5D3A1A",
   Amethyst: "#9966CC",
 };
-
