@@ -4,6 +4,7 @@ import ForceGraph2D, { NodeObject } from "react-force-graph-2d";
 
 import { store, useNewFiles } from "../../stores/connection-store";
 import { colorMap } from "shadow-shared";
+import Popup from "./popup";
 
 type User = {
   id: number;
@@ -37,6 +38,7 @@ export function UiUserNetwork(props: {
   const graphRef = useRef<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedNode, setSelectedNode] = useState<User | null>(null);
+  const [activeLink, setActiveLink] = useState<Link | null>(null);
 
   const nodes = [
     { id: props.me.id, userName: props.me.userName },
@@ -122,13 +124,45 @@ export function UiUserNetwork(props: {
         width={width}
         height={height}
         nodeVal={(node) => (node.id === props.me.id ? 10 : 8)}
-        linkColor={() => "rgba(255, 255, 255, 0.7)"}
-        linkWidth={1}
-        linkCanvasObjectMode="replace"
         onNodeClick={handleNodeClick}
         enablePanInteraction={false}
         enableZoomInteraction={false}
         minZoom={5}
+        onLinkClick={(link, event) => {
+          const source = link.source as NodeObject<User>;
+          const target = link.target as NodeObject<User>;
+          if (!source.x || !source.y || !target.x || !target.y) return;
+        
+          const startX = source.x;
+          const startY = source.y;
+          const endX = target.x;
+          const endY = target.y;
+        
+          const midX = (startX + endX) / 2;
+          const midY = (startY + endY) / 2;
+        
+          const dx = endX - startX;
+          const dy = endY - startY;
+          const angle = Math.atan2(dy, dx);
+        
+          const { x: mouseX, y: mouseY } = graphRef.current.screen2GraphCoords(event.offsetX, event.offsetY);
+          const relX = mouseX - midX;
+          const relY = mouseY - midY;
+        
+          const cos = Math.cos(-angle);
+          const sin = Math.sin(-angle);
+          const rotatedX = relX * cos - relY * sin;
+          const rotatedY = relX * sin + relY * cos;
+        
+          const radius = 12;
+          const fontSize = 8;
+          const circleY = fontSize / 2 + radius;
+          const dist = Math.hypot(rotatedX, rotatedY - circleY);
+        
+          if (dist <= radius + 6) {
+            setActiveLink(link);
+          }
+        }}
         nodeCanvasObject={(node, ctx, globalScale) => {
           const label = node.userName as string;
           const fontSize = 12 / globalScale;
@@ -157,37 +191,86 @@ export function UiUserNetwork(props: {
           }
         }}
         linkCanvasObject={(link, ctx, globalScale) => {
-          const fontSize = Math.max(12 / globalScale, 3); // Ensure text remains readable
-        
           const source = link.source as NodeObject<User>;
           const target = link.target as NodeObject<User>;
         
-          // Ensure both nodes have positions before rendering
-          if (!source.x || !source.y || !target.x || !target.y) return;
+          if (source.x === undefined || source.y === undefined || target.x === undefined || target.y === undefined) return;
         
-          const midX = (source.x + target.x) / 2;
-          const midY = (source.y + target.y) / 2;
+          const startX = source.x;
+          const startY = source.y;
+          const endX = target.x;
+          const endY = target.y;
+        
+          const midX = (startX + endX) / 2;
+          const midY = (startY + endY) / 2;
+        
+          const dx = endX - startX;
+          const dy = endY - startY;
+          const angle = Math.atan2(dy, dx);
+        
+          const progress = link.progress ?? 100;
         
           ctx.save();
         
-          // **Step 1: Draw the Link**
+          // Draw the line
           ctx.beginPath();
-          ctx.moveTo(source.x, source.y);
-          ctx.lineTo(target.x, target.y);
+          ctx.moveTo(startX, startY);
+          ctx.lineTo(endX, endY);
           ctx.strokeStyle = "rgba(255, 255, 255, 0.7)";
-          ctx.lineWidth = 1;
+          ctx.lineWidth = 0.5;
           ctx.stroke();
         
-          // **Step 2: Draw the Text on the Link**
+          ctx.translate(midX, midY);
+          ctx.rotate(angle);
+        
+          // Flip
+          if (Math.abs(angle) > Math.PI / 2) {
+            ctx.rotate(Math.PI);
+          }
+        
+          const fontSize = Math.max(8 / globalScale, 2);
+          const offset = 12 / globalScale;      
+          const radius = 12 / globalScale;
+          const circleY = fontSize/2+ radius;
+
+          // underlying circle 
+          ctx.beginPath();
+          ctx.arc(0, circleY, radius, 0, 2 * Math.PI);
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
+          ctx.lineWidth = 4 / globalScale;
+          ctx.stroke();
+
+          // top circle 
+          ctx.beginPath();
+          ctx.arc(0, circleY, radius, -Math.PI / 2, (-Math.PI / 2) + (2 * Math.PI * progress / 100));
+          ctx.strokeStyle = "#3b82f6";
+          ctx.lineWidth = 4 / globalScale;
+          ctx.stroke();
+
+          // percentage text
           ctx.font = `${fontSize}px Sans-Serif`;
           ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
           ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.fillText("Connection", midX, midY);
+          ctx.textBaseline = "top";
+          ctx.fillText(`${progress}%`, 0, offset);
         
           ctx.restore();
         }}
       />
+      <Popup text="Cancel process?" isOpen={activeLink?true:false}>
+        <button
+          onClick={()=>{console.log("sss");setActiveLink(null)}}
+          className="px-4 py-2 bg-red-500 text-white rounded-xl hover:bg-red-600 transition cursor-pointer"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={()=>{console.log("s"); setActiveLink(null)}}
+          className="px-4 py-2 bg-green-500 text-white rounded-xl hover:bg-green-600 transition cursor-pointer"
+        >
+          Close
+        </button>
+      </Popup>
     </div>
   );
 }
