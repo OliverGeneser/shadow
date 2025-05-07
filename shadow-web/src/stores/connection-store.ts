@@ -10,6 +10,7 @@ import {
   SignalOfferData,
   WSResponse,
 } from "shadow-shared";
+import { useEffect } from "react";
 
 export interface rtcConnectionsArray {
   clientId: string;
@@ -96,14 +97,7 @@ export const store = createStore({
   context: {
     clientId: "",
     roomId: "",
-    keyPair: await window.crypto.subtle.generateKey(
-      {
-        name: "ECDH",
-        namedCurve: "P-384",
-      },
-      false,
-      ["deriveKey"],
-    ),
+    keyPair: null as CryptoKeyPair | null,
     clients: [] as Clients,
     receivedFiles: [] as ReceivedFiles[],
     receiveBuffers: {} as { [id: string]: BlobPart[] },
@@ -117,6 +111,9 @@ export const store = createStore({
     socket: new WebSocket(serverUrl),
   },
   on: {
+    setCryptoKey: (context, event: { keys: CryptoKeyPair }) => {
+      return { ...context, keyPair: event.keys };
+    },
     handleMessage: (context, event: { message: string }) => {
       try {
         const msg = WSResponse.parse(JSON.parse(event.message));
@@ -280,13 +277,15 @@ export const store = createStore({
       tempSocket.onopen = function () {
         console.log("Connection Open!");
 
-        console.log(context.keyPair.publicKey);
-        const message: RoomData = {
-          type: "create or join",
-          roomId: event.roomId,
-          publicKey: context.keyPair.publicKey,
-        };
-        context.socket.send(JSON.stringify(message));
+        console.log(context.keyPair?.publicKey);
+        if (context.keyPair?.publicKey) {
+          const message: RoomData = {
+            type: "create or join",
+            roomId: event.roomId,
+            publicKey: context.keyPair?.publicKey,
+          };
+          context.socket.send(JSON.stringify(message));
+        }
       };
 
       tempSocket.onmessage = (event) =>
@@ -357,6 +356,7 @@ export const store = createStore({
           (client) => client.clientId === event.peerId,
         );
         if (client.length === 0) return;
+        if (!context.keyPair) return;
 
         console.log(client[0].publicKey);
         const secretKey = await deriveSecretKey(
@@ -429,6 +429,7 @@ export const store = createStore({
           (client) => client.clientId === event.peerId,
         );
         if (client.length === 0) return;
+        if (!context.keyPair) return;
         console.log(client[0].publicKey);
         const secretKey = await deriveSecretKey(
           context.keyPair.privateKey,
@@ -566,6 +567,31 @@ export const store = createStore({
     },
   },
 });
+
+export function useSetupStore() {
+  useEffect(() => {
+    const setupSubscription = store.on("setup", async () => {
+      const keys = await window.crypto.subtle.generateKey(
+        {
+          name: "ECDH",
+          namedCurve: "P-384",
+        },
+        false,
+        ["deriveKey"],
+      );
+
+      store.send({ type: "setCryptoKey", keys });
+    });
+
+    //const logOutSubscription = store.on("connect", () => {
+    //  storage.clearAuth();
+    //});
+
+    return () => {
+      setupSubscription.unsubscribe();
+    };
+  }, []);
+}
 
 export const useClientId = () =>
   useSelector(store, (state) => state.context.clientId);
