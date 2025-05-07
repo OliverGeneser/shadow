@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { UiTextarea } from "./textarea";
+import { Textarea } from "./textarea";
 import { button } from "./button";
 
 type Message = {
@@ -11,7 +11,7 @@ type Message = {
   isUser?: boolean;
 };
 
-export function UiChat() {
+export function Chat() {
   const [messages, setMessages] = useState<Message[]>([
     { id: 1, user: "Pony", text: "Hello!" },
     { id: 2, user: "Dolphin", text: "Hello!" },
@@ -92,7 +92,7 @@ export function UiChat() {
         >
           SEND
         </button>
-        <UiTextarea
+        <Textarea
           value={input}
           onChange={(str) => setInput(str)}
           onKeyDown={handleKeyDown}

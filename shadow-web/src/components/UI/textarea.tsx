@@ -1,4 +1,4 @@
-export function UiTextarea(props: {
+export function Textarea(props: {
   value: string;
   placeholder?: string;
   onChange: (str: string) => void;

@@ -29,7 +29,7 @@ export function Downloads() {
   );
 }
 
-export function UiUserNetwork(props: {
+export function UserNetwork(props: {
   me: User;
   users: User[];
   onClick: (target: string) => void;

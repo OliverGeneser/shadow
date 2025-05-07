@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { v4 as uuidv4, validate as uuidValidate } from "uuid";
 import { store, useClientId, useClients } from "./stores/connection-store";
-import { UiChat } from "./components/UI/chat";
-import { UiUserNetwork } from "./components/UI/userNetwork";
+import { Chat } from "./components/UI/chat";
+import { UserNetwork } from "./components/UI/userNetwork";
 import { button } from "./components/UI/button";
 import ShareButton from "./components/UI/share";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -33,7 +33,7 @@ function RoomView() {
     <div className="relative flex h-screen w-full overflow-hidden bg-gray-600">
       <div className="absolute inset-0 w-screen origin-bottom-left -rotate-12 transform bg-gradient-to-br from-gray-700 to-gray-600" />
 
-      <UiUserNetwork
+      <UserNetwork
         me={{ id: 0, userName: client }}
         users={clients.map((client: any, index) => {
           return { id: index + 1, userName: client.clientId };
@@ -81,7 +81,7 @@ function ChatPanel(props: { open: boolean }) {
         <FontAwesomeIcon icon={faComments} />
       </button>
       <div ref={chatRef} className="h-screen py-5">
-        <UiChat />
+        <Chat />
       </div>
     </div>
   );
