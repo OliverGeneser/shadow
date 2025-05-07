@@ -5,4 +5,3 @@ if (window.location.protocol === "https:") {
 }
 
 export const serverUrl = scheme + "://" + import.meta.env.VITE_WEBSOCKET_URL;
-console.log(serverUrl);

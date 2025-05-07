@@ -1,12 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { v4 as uuidv4, validate as uuidValidate } from "uuid";
-import {
-  store,
-  useClientId,
-  useClients,
-  useSetupStore,
-} from "./stores/connection-store";
+import { store, useClientId, useClients } from "./stores/connection-store";
 import { UiChat } from "./components/UI/chat";
 import { UiUserNetwork } from "./components/UI/userNetwork";
 import { button } from "./components/UI/button";
@@ -19,7 +14,6 @@ function RoomView() {
   const navigate = useNavigate();
   const client = useClientId();
   const clients = useClients();
-  useSetupStore();
 
   useEffect(() => {
     if (!uuidValidate(id) || id === undefined) {
@@ -27,7 +21,7 @@ function RoomView() {
       navigate(`/${newRoomId}`, { replace: true });
       return;
     } else {
-      store.send({ type: "setupSocket", roomId: id });
+      store.send({ type: "setRoom", roomId: id });
     }
   }, [id, navigate]);
 

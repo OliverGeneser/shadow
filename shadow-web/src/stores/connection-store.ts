@@ -10,7 +10,6 @@ import {
   SignalOfferData,
   WSResponse,
 } from "shadow-shared";
-import { useEffect } from "react";
 
 export interface rtcConnectionsArray {
   clientId: string;
@@ -108,156 +107,20 @@ export const store = createStore({
     webrtcConnections: {} as WebRTCConnections,
     fileChannelConnections: {} as DataChannelConnections,
     chatChannelConnections: {} as DataChannelConnections,
-    socket: new WebSocket(serverUrl),
+    socket: null as WebSocket | null,
   },
   on: {
     setCryptoKey: (context, event: { keys: CryptoKeyPair }) => {
       return { ...context, keyPair: event.keys };
     },
-    handleMessage: (context, event: { message: string }) => {
-      try {
-        const msg = WSResponse.parse(JSON.parse(event.message));
-        console.log(msg);
-
-        switch (msg.type) {
-          case "ready": {
-            const message: ClientsData = {
-              type: "clients",
-            };
-            context.socket.send(JSON.stringify(message));
-
-            return {
-              ...context,
-              clientId: msg.metadata.clientId,
-              roomId: msg.metadata.roomId,
-            };
-          }
-          case "clients": {
-            console.log(msg);
-            return {
-              ...context,
-              clients: msg.clients,
-            };
-          }
-          case "offer": {
-            let localPeer;
-            if (context.webrtcConnections[msg.from]) {
-              localPeer = context.webrtcConnections[msg.from];
-            } else {
-              localPeer = new RTCPeerConnection(config);
-            }
-
-            localPeer.onicecandidate = ({ candidate }) => {
-              if (candidate) {
-                const message: SignalCandidateData = {
-                  type: "signal-candidate",
-                  to: msg.from,
-                  signal: candidate,
-                };
-                context.socket.send(JSON.stringify(message));
-              }
-            };
-            const func = async () => {
-              await localPeer.setRemoteDescription(msg.offer);
-              await localPeer.setLocalDescription(
-                await localPeer.createAnswer(),
-              );
-              if (localPeer.localDescription !== null) {
-                const message: SignalAnswerData = {
-                  type: "signal-answer",
-                  to: msg.from,
-                  signal: localPeer.localDescription,
-                };
-                context.socket.send(JSON.stringify(message));
-              }
-            };
-
-            func();
-
-            localPeer.ondatachannel = (e) => {
-              const dataChannel = e.channel;
-              dataChannel.binaryType = "arraybuffer";
-              dataChannel.bufferedAmountLowThreshold = 0;
-              dataChannel.onmessage = (e) =>
-                store.send({
-                  type: "onReceiveMessageCallback",
-                  peerId: msg.from,
-                  event: e,
-                });
-
-              dataChannel.onopen = () =>
-                console.log("Connected to sender peer.");
-
-              store.send({
-                type: "setFileChannelConnection",
-                peerId: msg.from,
-                dataChannel: dataChannel,
-              });
-            };
-
-            return {
-              ...context,
-              webrtcConnections: {
-                ...context.webrtcConnections,
-                [msg.from]: localPeer,
-              },
-            };
-          }
-
-          case "answer": {
-            let localPeer;
-            if (context.webrtcConnections[msg.from]) {
-              localPeer = context.webrtcConnections[msg.from];
-            } else {
-              return { ...context };
-            }
-
-            localPeer.setRemoteDescription(msg.answer);
-
-            return {
-              ...context,
-              webrtcConnections: {
-                ...context.webrtcConnections,
-                [msg.from]: localPeer,
-              },
-            };
-          }
-
-          case "candidate": {
-            let localPeer;
-            if (context.webrtcConnections[msg.from]) {
-              localPeer = context.webrtcConnections[msg.from];
-            } else {
-              return { ...context };
-            }
-
-            localPeer.addIceCandidate(msg.candidate);
-
-            return {
-              ...context,
-              webrtcConnections: {
-                ...context.webrtcConnections,
-                [msg.from]: localPeer,
-              },
-            };
-          }
-
-          case "leave": {
-            return {
-              ...context,
-              clients: context.clients.filter(
-                (client) => client.clientId !== msg.client,
-              ),
-            };
-          }
-
-          default:
-            console.error("Unknown message received:");
-            console.error(msg);
-        }
-      } catch (e) {
-        console.log(e);
-      }
+    setWebSocket: (context, event: { webSocket: WebSocket }) => {
+      return { ...context, socket: event.webSocket };
+    },
+    setClientId: (context, event: { clientId: string }) => {
+      return { ...context, clientId: event.clientId };
+    },
+    setClients: (context, event: { clients: Clients }) => {
+      return { ...context, clients: event.clients };
     },
     setFileChannelConnection: (
       context,
@@ -271,31 +134,182 @@ export const store = createStore({
         },
       };
     },
-    setupSocket: (context, event: { type: "setupSocket"; roomId: string }) => {
-      const tempSocket = context.socket;
+    setWebRTCConnections: (
+      context,
+      event: { peerId: string; connection: RTCPeerConnection },
+    ) => {
+      return {
+        ...context,
+        webrtcConnections: {
+          ...context.webrtcConnections,
+          [event.peerId]: event.connection,
+        },
+      };
+    },
+    setRoom: (context, event: { roomId: string }, enqueue) => {
+      enqueue.effect(async () => {
+        const keys = await window.crypto.subtle.generateKey(
+          {
+            name: "ECDH",
+            namedCurve: "P-384",
+          },
+          false,
+          ["deriveKey"],
+        );
 
-      tempSocket.onopen = function () {
-        console.log("Connection Open!");
+        store.send({ type: "setCryptoKey", keys });
 
-        console.log(context.keyPair?.publicKey);
-        if (context.keyPair?.publicKey) {
+        const webSocket = new WebSocket(serverUrl);
+
+        webSocket.onopen = function () {
+          console.log("Connection Open!");
           const message: RoomData = {
             type: "create or join",
             roomId: event.roomId,
-            publicKey: context.keyPair?.publicKey,
+            publicKey: keys.publicKey,
           };
-          context.socket.send(JSON.stringify(message));
-        }
-      };
 
-      tempSocket.onmessage = (event) =>
-        store.trigger.handleMessage({ message: event.data });
+          webSocket.send(JSON.stringify(message));
+        };
 
-      tempSocket.onclose = function () {
-        console.log("Connection Closed!");
-      };
+        webSocket.onmessage = async (event) => {
+          try {
+            const msg = WSResponse.parse(JSON.parse(event.data));
 
-      return { ...context, socket: tempSocket, roomId: event.roomId };
+            switch (msg.type) {
+              case "ready": {
+                const message: ClientsData = {
+                  type: "clients",
+                };
+                webSocket.send(JSON.stringify(message));
+                store.send({
+                  type: "setClientId",
+                  clientId: msg.metadata.clientId,
+                });
+                break;
+              }
+              case "clients":
+                store.send({ type: "setClients", clients: msg.clients });
+                break;
+              case "offer": {
+                let localPeer;
+                if (context.webrtcConnections[msg.from]) {
+                  localPeer = context.webrtcConnections[msg.from];
+                } else {
+                  localPeer = new RTCPeerConnection(config);
+                }
+
+                localPeer.onicecandidate = ({ candidate }) => {
+                  if (candidate) {
+                    const message: SignalCandidateData = {
+                      type: "signal-candidate",
+                      to: msg.from,
+                      signal: candidate,
+                    };
+                    webSocket.send(JSON.stringify(message));
+                  }
+                };
+
+                await localPeer.setRemoteDescription(msg.offer);
+                await localPeer.setLocalDescription(
+                  await localPeer.createAnswer(),
+                );
+                if (localPeer.localDescription !== null) {
+                  const message: SignalAnswerData = {
+                    type: "signal-answer",
+                    to: msg.from,
+                    signal: localPeer.localDescription,
+                  };
+                  webSocket.send(JSON.stringify(message));
+                }
+
+                localPeer.ondatachannel = (e) => {
+                  const dataChannel = e.channel;
+                  dataChannel.binaryType = "arraybuffer";
+                  dataChannel.bufferedAmountLowThreshold = 0;
+                  dataChannel.onmessage = (e) =>
+                    store.send({
+                      type: "onReceiveMessageCallback",
+                      peerId: msg.from,
+                      event: e,
+                    });
+
+                  dataChannel.onopen = () =>
+                    console.log("Connected to sender peer.");
+
+                  store.send({
+                    type: "setFileChannelConnection",
+                    peerId: msg.from,
+                    dataChannel: dataChannel,
+                  });
+                };
+
+                store.send({
+                  type: "setWebRTCConnections",
+                  peerId: msg.from,
+                  connection: localPeer,
+                });
+                break;
+              }
+              case "answer": {
+                let localPeer;
+                if (context.webrtcConnections[msg.from]) {
+                  localPeer = context.webrtcConnections[msg.from];
+                } else {
+                  break;
+                }
+
+                localPeer.setRemoteDescription(msg.answer);
+
+                store.send({
+                  type: "setWebRTCConnections",
+                  peerId: msg.from,
+                  connection: localPeer,
+                });
+                break;
+              }
+
+              case "candidate": {
+                let localPeer;
+                if (context.webrtcConnections[msg.from]) {
+                  localPeer = context.webrtcConnections[msg.from];
+                } else {
+                  break;
+                }
+
+                localPeer.addIceCandidate(msg.candidate);
+                store.send({
+                  type: "setWebRTCConnections",
+                  peerId: msg.from,
+                  connection: localPeer,
+                });
+                break;
+              }
+              case "leave":
+                store.send({
+                  type: "setClients",
+                  clients: context.clients.filter(
+                    (client) => client.clientId !== msg.client,
+                  ),
+                });
+                break;
+              default:
+                console.error("Unknown message received:");
+                console.error(msg);
+            }
+          } catch (e) {
+            console.log(e);
+          }
+        };
+
+        webSocket.onclose = function () {
+          console.log("Connection Closed!");
+        };
+
+        store.send({ type: "setWebSocket", webSocket });
+      });
+
+      return { ...context, roomId: event.roomId };
     },
     sendData: (context, event: { peerId: string; data: File }) => {
       let dataChannel;
@@ -532,7 +546,7 @@ export const store = createStore({
             to: event.peerId,
             signal: candidate,
           };
-          context.socket.send(JSON.stringify(message));
+          context.socket!.send(JSON.stringify(message));
         }
       };
 
@@ -546,7 +560,7 @@ export const store = createStore({
               to: event.peerId,
               signal: localPeer.localDescription,
             };
-            context.socket.send(JSON.stringify(message));
+            context.socket!.send(JSON.stringify(message));
           }
         } catch (err) {
           console.error(err);
@@ -568,31 +582,6 @@ export const store = createStore({
   },
 });
 
-export function useSetupStore() {
-  useEffect(() => {
-    const setupSubscription = store.on("setup", async () => {
-      const keys = await window.crypto.subtle.generateKey(
-        {
-          name: "ECDH",
-          namedCurve: "P-384",
-        },
-        false,
-        ["deriveKey"],
-      );
-
-      store.send({ type: "setCryptoKey", keys });
-    });
-
-    //const logOutSubscription = store.on("connect", () => {
-    //  storage.clearAuth();
-    //});
-
-    return () => {
-      setupSubscription.unsubscribe();
-    };
-  }, []);
-}
-
 export const useClientId = () =>
   useSelector(store, (state) => state.context.clientId);
 export const useRoomId = () =>
@@ -600,6 +589,8 @@ export const useRoomId = () =>
 export const useClients = () =>
   useSelector(store, (state) => state.context.clients);
 export const useSocketState = () =>
-  useSelector(store, (state) => state.context.socket.readyState);
+  useSelector(store, (state) =>
+    state.context.socket ? state.context.socket.readyState : undefined,
+  );
 export const useNewFiles = () =>
   useSelector(store, (state) => state.context.receivedFiles);
