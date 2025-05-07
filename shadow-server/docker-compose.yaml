@@ -1,0 +1,10 @@
+services:
+  coturn:
+    image: ghcr.io/coturn/coturn:4.6.3
+    network_mode: host
+    volumes:
+      - ./coturn/coturn.conf:/etc/coturn/turnserver.conf:ro
+      - ./coturn/cert.pem:/etc/coturn/turn_server_cert.pem
+      - ./coturn/key.pem:/etc/coturn/turn_server_pkey.pem
+    env_file:
+      - .env
