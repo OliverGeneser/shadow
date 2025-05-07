@@ -518,7 +518,7 @@ export const store = createStore({
       dataChannel.onmessage = (e) =>
         store.send({
           type: "onReceiveMessageCallback",
-          to: event.peerId,
+          peerId: event.peerId,
           event: e,
         });
       dataChannel.bufferedAmountLowThreshold = 0;

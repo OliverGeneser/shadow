@@ -4,10 +4,4 @@ if (window.location.protocol === "https:") {
   scheme += "s";
 }
 
-export const serverUrl =
-  scheme +
-  "://" +
-  window.location.hostname +
-  ":" +
-  "3005" + //import.meta.env.port +
-  "/websocket";
+export const serverUrl = scheme + "://" + import.meta.env.VITE_WEBSOCKER_URL;
