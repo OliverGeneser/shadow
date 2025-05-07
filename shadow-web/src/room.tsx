@@ -76,7 +76,7 @@ function ChatPanel(props: { open: boolean }) {
           color: "primary",
           padding: "none",
           className:
-            "absolute top-7 left-0 -translate-x-full rounded-r-none bg-gray-500 p-2 hover:bg-gray-400",
+            "absolute top-20 left-0 -translate-x-full rounded-r-none bg-gray-500 p-2 hover:bg-gray-400",
         })}
       >
         <FontAwesomeIcon icon={faComments} />
