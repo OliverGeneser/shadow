@@ -61,12 +61,17 @@ export default RoomView;
 function ChatPanel(props: { open: boolean }) {
   const chatRef = useRef<HTMLDivElement>(null);
   const [isOpen, setIsOpen] = useState(props.open);
+  const [chatWidth, setChatWidth] = useState(1000);
+
+  useEffect(()=>{
+    chatRef.current?.clientWidth&&setChatWidth(chatRef.current?.clientWidth)
+  },[chatRef.current?.clientWidth]);
 
   return (
     <div
       className={`fixed top-1/2 z-50 -translate-y-1/2 duration-300 ease-in-out`}
       style={{
-        right: isOpen ? "0px" : -(chatRef.current?.clientWidth ?? 0),
+        right: isOpen ? "0px" : -chatWidth,
       }}
     >
       <button
