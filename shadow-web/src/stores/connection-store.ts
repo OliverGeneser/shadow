@@ -77,16 +77,14 @@ async function encryptMessage(
 async function decryptMessage(
   key: CryptoKey,
   initializationVector: Uint8Array,
-  ciphertext: ArrayBuffer,
+  ciphertext: Uint8Array,
 ) {
   try {
-    const decryptedText = await window.crypto.subtle.decrypt(
+    return await window.crypto.subtle.decrypt(
       { name: "AES-GCM", iv: initializationVector },
       key,
       ciphertext,
     );
-    const utf8Decoder = new TextDecoder();
-    return utf8Decoder.decode(decryptedText);
   } catch (e) {
     console.log(e);
   }
@@ -161,12 +159,18 @@ export const store = createStore({
 
         const webSocket = new WebSocket(serverUrl);
 
-        webSocket.onopen = function () {
+        webSocket.onopen = async function () {
           console.log("Connection Open!");
+
+          const jwtKey = await window.crypto.subtle.exportKey(
+            "jwk",
+            keys.publicKey,
+          );
+
           const message: RoomData = {
             type: "create or join",
             roomId: event.roomId,
-            publicKey: keys.publicKey,
+            publicKey: jwtKey,
           };
 
           webSocket.send(JSON.stringify(message));
@@ -234,8 +238,7 @@ export const store = createStore({
                       event: e,
                     });
 
-                  dataChannel.onopen = () =>
-                    console.log("Connected to sender peer.");
+                  dataChannel.onopen = () => console.log("Connected to peer.");
 
                   store.send({
                     type: "setFileChannelConnection",
@@ -318,22 +321,16 @@ export const store = createStore({
       } else {
         return context;
       }
-      if (dataChannel) {
-        dataChannel.send(
-          JSON.stringify({
-            name: "hey.ts",
-            size: 200,
-            type: "ts",
-          }),
-        );
-      }
-      return {
-        ...context,
-        fileChannelConnections: {
-          ...context.fileChannelConnections,
-          [event.peerId]: dataChannel,
-        },
-      };
+      console.log(dataChannel);
+      dataChannel.send(
+        JSON.stringify({
+          name: "hey.ts",
+          size: 200,
+          type: "ts",
+        }),
+      );
+
+      return context;
     },
     newFile: (context, event: { fileURL: string; fileName: string }) => {
       return {
@@ -351,32 +348,65 @@ export const store = createStore({
       } else {
         return context;
       }
-      if (dataChannel) {
-        dataChannel.send(
-          JSON.stringify({
-            name: event.file.name,
-            size: event.file.size,
-            type: event.file.type,
-          }),
-        );
-      }
+
+      if (dataChannel.readyState !== "open") return context;
 
       enqueue.effect(async () => {
         let offset = 0;
         const maxChunkSize = 16384;
 
-        console.log(dataChannel.bufferedAmountLowThreshold);
-        const client = context.clients.filter(
+        const client = context.clients.find(
           (client) => client.clientId === event.peerId,
         );
-        if (client.length === 0) return;
+
+        if (!client) return;
         if (!context.keyPair) return;
 
-        console.log(client[0].publicKey);
+        const publicKey = await window.crypto.subtle.importKey(
+          "jwk",
+          client.publicKey,
+          {
+            name: "ECDH",
+            namedCurve: "P-384",
+          },
+          true,
+          [],
+        );
+
         const secretKey = await deriveSecretKey(
           context.keyPair.privateKey,
-          client[0].publicKey,
+          publicKey,
         );
+
+        if (dataChannel) {
+          const initializationVector = window.crypto.getRandomValues(
+            new Uint8Array(8),
+          );
+
+          const encryptedChunk = await encryptMessage(
+            secretKey,
+            initializationVector,
+            new TextEncoder().encode(
+              JSON.stringify({
+                name: event.file.name,
+                size: event.file.size,
+                type: event.file.type,
+              }),
+            ).buffer,
+          );
+          if (!encryptedChunk) {
+            throw new Error("Failed to encrypt!!!");
+          }
+
+          console.log(dataChannel.readyState);
+
+          dataChannel.send(
+            JSON.stringify({
+              encryptedChunk: Array.from(new Uint8Array(encryptedChunk)),
+              initializationVector: Array.from(initializationVector),
+            }),
+          );
+        }
 
         await event.file.arrayBuffer().then(async (buffer) => {
           const send = async () => {
@@ -406,7 +436,12 @@ export const store = createStore({
                 throw new Error("Failed to encrypt!!!");
               }
 
-              dataChannel.send(encryptedChunk);
+              dataChannel.send(
+                JSON.stringify({
+                  encryptedChunk: Array.from(new Uint8Array(encryptedChunk)),
+                  initializationVector: Array.from(initializationVector),
+                }),
+              );
               offset += maxChunkSize;
               console.log("Sent " + offset + " bytes.");
               console.log(((offset / event.file.size) * 100).toFixed(1) + "%");
@@ -437,43 +472,54 @@ export const store = createStore({
       const receive = async () => {
         const receiveBuffer = context.receiveBuffers[event.peerId] ?? [];
         let receivedSize = context.receiveSizes[event.peerId] ?? 0;
-        let receivedFile = context.receiveFiles[event.peerId] ?? undefined;
+        const receivedFile = context.receiveFiles[event.peerId] ?? undefined;
+        console.log(context.receiveFiles);
 
         const client = context.clients.filter(
           (client) => client.clientId === event.peerId,
         );
         if (client.length === 0) return;
-        if (!context.keyPair) return;
-        console.log(client[0].publicKey);
-        const secretKey = await deriveSecretKey(
-          context.keyPair.privateKey,
+
+        const publicKey = await window.crypto.subtle.importKey(
+          "jwk",
           client[0].publicKey,
+          {
+            name: "ECDH",
+            namedCurve: "P-384",
+          },
+          true,
+          [],
         );
 
-        const initializationVector = window.crypto.getRandomValues(
-          new Uint8Array(8),
+        const secretKey = await deriveSecretKey(
+          context.keyPair!.privateKey,
+          publicKey,
         );
 
-        const data = await decryptMessage(
-          secretKey,
-          initializationVector,
-          event.event.data,
+        const WSData = JSON.parse(event.event.data);
+
+        const data = new TextDecoder().decode(
+          await decryptMessage(
+            secretKey,
+            new Uint8Array(WSData.initializationVector),
+            new Uint8Array(WSData.encryptedChunk),
+          ),
         );
         if (!data) {
-          throw new Error("Failed to encrypt!!!");
+          throw new Error("Failed to decrypt!!!");
         }
 
-        if (receivedFile == undefined) {
+        if (receivedFile === undefined) {
           const file = JSON.parse(data);
-          receivedFile = file;
           return {
             ...context,
             receiveFiles: {
               ...context.receiveFiles,
-              [event.peerId]: receivedFile,
+              [event.peerId]: file,
             },
           };
         }
+
         receiveBuffer.push(data);
         // @ts-expect-error Missing type
         receivedSize += data.byteLength;

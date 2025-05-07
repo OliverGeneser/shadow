@@ -4,7 +4,7 @@ const roomDataSchema = z
   .object({
     type: z.literal("create or join"),
     roomId: z.string().optional(),
-    publicKey: z.custom<CryptoKey>(),
+    publicKey: z.custom<JsonWebKey>(),
   })
   .strict();
 
@@ -90,7 +90,7 @@ export const clientsSchema = z.array(
   z
     .object({
       clientId: z.string(),
-      publicKey: z.custom<CryptoKey>(),
+      publicKey: z.custom<JsonWebKey>(),
     })
     .strict(),
 );
