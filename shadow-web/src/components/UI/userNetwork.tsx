@@ -71,9 +71,9 @@ export function UserNetwork(props: {
 
   useEffect(() => {
     if (!graphRef.current) return;
-    graphRef.current.d3Force('charge').strength(-100);
-  
-    const collisionForce = graphRef.current.d3Force('collision');
+    graphRef.current.d3Force("charge").strength(-100);
+
+    const collisionForce = graphRef.current.d3Force("collision");
     if (collisionForce) {
       collisionForce
         .radius((node: any) => (node.id === props.me.id ? 10 : 8))
@@ -132,33 +132,36 @@ export function UserNetwork(props: {
           const source = link.source as NodeObject<User>;
           const target = link.target as NodeObject<User>;
           if (!source.x || !source.y || !target.x || !target.y) return;
-        
+
           const startX = source.x;
           const startY = source.y;
           const endX = target.x;
           const endY = target.y;
-        
+
           const midX = (startX + endX) / 2;
           const midY = (startY + endY) / 2;
-        
+
           const dx = endX - startX;
           const dy = endY - startY;
           const angle = Math.atan2(dy, dx);
-        
-          const { x: mouseX, y: mouseY } = graphRef.current.screen2GraphCoords(event.offsetX, event.offsetY);
+
+          const { x: mouseX, y: mouseY } = graphRef.current.screen2GraphCoords(
+            event.offsetX,
+            event.offsetY,
+          );
           const relX = mouseX - midX;
           const relY = mouseY - midY;
-        
+
           const cos = Math.cos(-angle);
           const sin = Math.sin(-angle);
           const rotatedX = relX * cos - relY * sin;
           const rotatedY = relX * sin + relY * cos;
-        
+
           const radius = 12;
           const fontSize = 8;
           const circleY = fontSize / 2 + radius;
           const dist = Math.hypot(rotatedX, rotatedY - circleY);
-        
+
           if (dist <= radius + 6) {
             setActiveLink(link);
           }
@@ -178,13 +181,13 @@ export function UserNetwork(props: {
           ctx.font = `italic ${fontSize * 0.8}px Sans-Serif`;
           ctx.fillStyle = "#fff";
           ctx.textAlign = "center";
-          if(node.id===props.me.id){
+          if (node.id === props.me.id) {
             ctx.fillText(`(${color})`, node.x!, node.y! - 2);
             ctx.font = ` ${fontSize * 0.9}px Sans-Serif`;
-            ctx.fillText("You", node.x!, node.y! +6);
+            ctx.fillText("You", node.x!, node.y! + 6);
             ctx.font = `bold ${fontSize}px Sans-Serif`;
             ctx.fillText(animal, node.x!, node.y! + 1);
-          }else{
+          } else {
             ctx.fillText(`(${color})`, node.x!, node.y! - 2);
             ctx.font = `bold ${fontSize}px Sans-Serif`;
             ctx.fillText(animal, node.x!, node.y! + 1);
@@ -193,25 +196,31 @@ export function UserNetwork(props: {
         linkCanvasObject={(link, ctx, globalScale) => {
           const source = link.source as NodeObject<User>;
           const target = link.target as NodeObject<User>;
-        
-          if (source.x === undefined || source.y === undefined || target.x === undefined || target.y === undefined) return;
-        
+
+          if (
+            source.x === undefined ||
+            source.y === undefined ||
+            target.x === undefined ||
+            target.y === undefined
+          )
+            return;
+
           const startX = source.x;
           const startY = source.y;
           const endX = target.x;
           const endY = target.y;
-        
+
           const midX = (startX + endX) / 2;
           const midY = (startY + endY) / 2;
-        
+
           const dx = endX - startX;
           const dy = endY - startY;
           const angle = Math.atan2(dy, dx);
-        
+
           const progress = link.progress ?? 100;
-        
+
           ctx.save();
-        
+
           // Draw the line
           ctx.beginPath();
           ctx.moveTo(startX, startY);
@@ -219,30 +228,36 @@ export function UserNetwork(props: {
           ctx.strokeStyle = "rgba(255, 255, 255, 0.7)";
           ctx.lineWidth = 0.5;
           ctx.stroke();
-        
+
           ctx.translate(midX, midY);
           ctx.rotate(angle);
-        
+
           // Flip
           if (Math.abs(angle) > Math.PI / 2) {
             ctx.rotate(Math.PI);
           }
-        
-          const fontSize = Math.max(8 / globalScale, 2);
-          const offset = 12 / globalScale;      
-          const radius = 12 / globalScale;
-          const circleY = fontSize/2+ radius;
 
-          // underlying circle 
+          const fontSize = Math.max(8 / globalScale, 2);
+          const offset = 12 / globalScale;
+          const radius = 12 / globalScale;
+          const circleY = fontSize / 2 + radius;
+
+          // underlying circle
           ctx.beginPath();
           ctx.arc(0, circleY, radius, 0, 2 * Math.PI);
           ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
           ctx.lineWidth = 4 / globalScale;
           ctx.stroke();
 
-          // top circle 
+          // top circle
           ctx.beginPath();
-          ctx.arc(0, circleY, radius, -Math.PI / 2, (-Math.PI / 2) + (2 * Math.PI * progress / 100));
+          ctx.arc(
+            0,
+            circleY,
+            radius,
+            -Math.PI / 2,
+            -Math.PI / 2 + (2 * Math.PI * progress) / 100,
+          );
           ctx.strokeStyle = "#3b82f6";
           ctx.lineWidth = 4 / globalScale;
           ctx.stroke();
@@ -253,20 +268,26 @@ export function UserNetwork(props: {
           ctx.textAlign = "center";
           ctx.textBaseline = "top";
           ctx.fillText(`${progress}%`, 0, offset);
-        
+
           ctx.restore();
         }}
       />
-      <Popup text="Cancel process?" isOpen={activeLink?true:false}>
+      <Popup text="Cancel process?" isOpen={activeLink ? true : false}>
         <button
-          onClick={()=>{console.log("sss");setActiveLink(null)}}
-          className="px-4 py-2 bg-red-500 text-white rounded-xl hover:bg-red-600 transition cursor-pointer"
+          onClick={() => {
+            console.log("sss");
+            setActiveLink(null);
+          }}
+          className="cursor-pointer rounded-xl bg-red-500 px-4 py-2 text-white transition hover:bg-red-600"
         >
           Cancel
         </button>
         <button
-          onClick={()=>{console.log("s"); setActiveLink(null)}}
-          className="px-4 py-2 bg-green-500 text-white rounded-xl hover:bg-green-600 transition cursor-pointer"
+          onClick={() => {
+            console.log("s");
+            setActiveLink(null);
+          }}
+          className="cursor-pointer rounded-xl bg-green-500 px-4 py-2 text-white transition hover:bg-green-600"
         >
           Close
         </button>

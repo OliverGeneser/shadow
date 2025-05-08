@@ -15,16 +15,13 @@ function RoomView() {
   const client = useClientId();
   const clients = useClients();
 
-  console.log("CLIENTSSS", clients);
-
   useEffect(() => {
     if (!uuidValidate(id) || id === undefined) {
       const newRoomId = uuidv4();
       navigate(`/${newRoomId}`, { replace: true });
       return;
     } else {
-      store.send({ type: "setupSocket", roomId: id });
-      //store.send({ type: "setRoom", roomId: id });
+      store.send({ type: "changeRoom", roomId: id });
     }
   }, [id, navigate]);
 
@@ -32,22 +29,19 @@ function RoomView() {
     store.send({ type: "setupConnection", peerId: id });
   };
 
-  console.log(
-    clients.map((client, index) => {
-      return { id: index + 1, userName: client.clientId };
-    }),
-  );
   return (
     <div className="relative flex h-screen w-full overflow-hidden bg-gray-600">
       <div className="absolute inset-0 w-screen origin-bottom-left -rotate-12 transform bg-gradient-to-br from-gray-700 to-gray-600" />
 
-      <UserNetwork
-        me={{ id: 0, userName: client }}
-        users={clients.map((client, index) => {
-          return { id: index + 1, userName: client.clientId };
-        })}
-        onClick={makeConnection}
-      />
+      {client ? (
+        <UserNetwork
+          me={{ id: 0, userName: client }}
+          users={clients.map((client, index) => {
+            return { id: index + 1, userName: client.clientId };
+          })}
+          onClick={makeConnection}
+        />
+      ) : null}
 
       <ChatPanel open={window.innerWidth > 1000} />
 
