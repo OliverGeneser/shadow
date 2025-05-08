@@ -2,29 +2,16 @@
 import { useEffect, useRef, useState } from "react";
 import ForceGraph2D from "react-force-graph-2d";
 
-import { store, useClientId, useClients, useNewFiles } from "../../stores/connection-store";
+import { store, useClientId, useClients } from "../../stores/connection-store";
 import { colorMap } from "shadow-shared";
 import Popup from "./popup";
 
 type User = {
   id: number;
   userName: string;
-  activity?: "sending"|"reiving"|"pending";
+  activity?: "sending" | "reiving" | "pending";
   progress?: number;
 };
-
-export function Downloads() {
-  const files = useNewFiles();
-  return (
-    <div>
-      {files.map((file) => (
-        <a key={file.url} href={file.name} download={file.name}>
-          {file.url}
-        </a>
-      ))}
-    </div>
-  );
-}
 
 export function UserNetwork() {
   const boxRef = useRef<HTMLDivElement>(null);
@@ -38,11 +25,12 @@ export function UserNetwork() {
 
   const me = { id: 0, userName: client };
 
-  const nodes = [{ id: me.id, userName: me.userName }, ...users??[]];
-  const links = users?.map((user) => ({
-    source: me.id,
-    target: user.id,
-  }))??[];
+  const nodes = [{ id: me.id, userName: me.userName }, ...(users ?? [])];
+  const links =
+    users?.map((user) => ({
+      source: me.id,
+      target: user.id,
+    })) ?? [];
 
   const graphData = { nodes, links };
   const [width, setWidth] = useState(0);
@@ -63,14 +51,23 @@ export function UserNetwork() {
     graphRef.current.d3Force("charge").strength(-100);
     const collisionForce = graphRef.current.d3Force("collision");
     if (collisionForce) {
-      collisionForce.radius((node: any) => (node.id === me.id ? 10 : 8)).strength(1);
+      collisionForce
+        .radius((node: any) => (node.id === me.id ? 10 : 8))
+        .strength(1);
     }
   }, [graphData]);
 
   useEffect(() => {
-    setUsers(clients.map((client, index) => {
-      return { id: index + 1, userName: client.clientId, activity: client.activity, process: client.progress };
-    }))
+    setUsers(
+      clients.map((client, index) => {
+        return {
+          id: index + 1,
+          userName: client.clientId,
+          activity: client.activity,
+          process: client.progress,
+        };
+      }),
+    );
   }, [clients]);
 
   const handleNodeClick = (node: any) => {
@@ -78,7 +75,7 @@ export function UserNetwork() {
 
     setSelectedNode(node);
 
-    if (node.activity!==undefined) {
+    if (node.activity !== undefined) {
       //cancel for this node/user
       console.log("Clicked active transfer user ID:", node.id);
       return;
@@ -86,7 +83,7 @@ export function UserNetwork() {
 
     console.log("Clicked user ID:", node.id);
     fileInputRef.current?.click();
-    store.send({ type: "setupConnection", peerId: node.username });
+    store.send({ type: "setupConnection", peerId: node.userName });
     //set node/user to pending
 
     // props.onClick(users.find((user) => user.id === node.id)!.userName);
@@ -98,7 +95,7 @@ export function UserNetwork() {
       console.log("Selected files:", files);
       console.log("Upload files to user ID:", selectedNode.id);
       // TODO: Handle file upload logic here
-      
+
       store.send({
         type: "sendFile",
         file: files[0],
@@ -109,16 +106,24 @@ export function UserNetwork() {
   };
 
   const cancelTransferForNode = (node: User) => {
-    if (node.activity!==undefined) {
+    if (node.activity !== undefined) {
       console.log("Canceling transfer for user ID:", node.id);
       //set node/user activity to undefined
     }
   };
 
   return (
-    <div className="relative flex h-full w-full items-center justify-center" ref={boxRef}>
-      <input type="file" className="hidden" ref={fileInputRef} onChange={handleFileChange} multiple />
-      <Downloads />
+    <div
+      className="relative flex h-full w-full items-center justify-center"
+      ref={boxRef}
+    >
+      <input
+        type="file"
+        className="hidden"
+        ref={fileInputRef}
+        onChange={handleFileChange}
+        multiple
+      />
       <ForceGraph2D
         ref={graphRef}
         graphData={graphData}
@@ -133,7 +138,7 @@ export function UserNetwork() {
         enableZoomInteraction={false}
         minZoom={5}
         nodeCanvasObject={(node, ctx, globalScale) => {
-          const label = node.userName as string;
+          const label = node.userName ?? "";
           const fontSize = 12 / globalScale;
           const [color, animal] = label.split(" ");
           const circleColor = colorMap[color] || "#3b82f6";
@@ -156,19 +161,20 @@ export function UserNetwork() {
             ctx.font = ` ${fontSize * 0.9}px Sans-Serif`;
             ctx.fillText("You", node.x!, node.y! + 6);
           }
-          
+
           // Indicating ring + progress
-          if (node.activity !==undefined && node.id !== me.id) {
+          if (node.activity !== undefined && node.id !== me.id) {
             const ringRadius = avatarSize + 2.5;
 
             // indicating circle
             ctx.beginPath();
             ctx.arc(node.x!, node.y!, ringRadius, 0, 2 * Math.PI);
-            ctx.strokeStyle = node.activity === "sending" ? "#22c55e" : "#f97316";
+            ctx.strokeStyle =
+              node.activity === "sending" ? "#22c55e" : "#f97316";
             ctx.lineWidth = 2 / globalScale;
             ctx.stroke();
 
-            if(node.activity==="sending"||node.activity==="reiving"){
+            if (node.activity === "sending" || node.activity === "reiving") {
               //progress
               const progressRadius = avatarSize + 1.5;
 
@@ -186,7 +192,7 @@ export function UserNetwork() {
                 node.y!,
                 progressRadius,
                 -Math.PI / 2,
-                (-Math.PI / 2) + (2 * Math.PI * node.progress / 100)
+                -Math.PI / 2 + (2 * Math.PI * node.progress) / 100,
               );
               ctx.strokeStyle = "#3b82f6";
               ctx.lineWidth = 3 / globalScale;
@@ -195,19 +201,22 @@ export function UserNetwork() {
           }
         }}
       />
-      <Popup text="Cancel process?" isOpen={selectedNode?.activity!==undefined}>
+      <Popup
+        text="Cancel process?"
+        isOpen={selectedNode?.activity !== undefined}
+      >
         <button
           onClick={() => {
             if (selectedNode) cancelTransferForNode(selectedNode);
             setSelectedNode(undefined);
           }}
-          className="px-4 py-2 bg-red-500 text-white rounded-xl hover:bg-red-600 transition cursor-pointer"
+          className="cursor-pointer rounded-xl bg-red-500 px-4 py-2 text-white transition hover:bg-red-600"
         >
           Cancel
         </button>
         <button
           onClick={() => setSelectedNode(undefined)}
-          className="px-4 py-2 bg-green-500 text-white rounded-xl hover:bg-green-600 transition cursor-pointer"
+          className="cursor-pointer rounded-xl bg-green-500 px-4 py-2 text-white transition hover:bg-green-600"
         >
           Close
         </button>

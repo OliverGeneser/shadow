@@ -10,6 +10,7 @@ import Room from "./room";
 import { useEffect } from "react";
 import { v4 as uuidv4 } from "uuid";
 import "./socket";
+import "./stores/connection-store";
 
 const router = createBrowserRouter(
   createRoutesFromElements(

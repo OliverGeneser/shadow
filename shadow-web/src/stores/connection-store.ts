@@ -18,10 +18,7 @@ interface WebRTCConnections {
 interface DataChannelConnections {
   [key: string]: RTCDataChannel;
 }
-interface ReceivedFiles {
-  name: string;
-  url: string;
-}
+
 export enum ReadyState {
   UNINSTANTIATED = -1,
   CONNECTING = 0,
@@ -87,6 +84,125 @@ async function decryptMessage(
   }
 }
 
+const receiveBuffers: { [id: string]: ArrayBuffer[] } = {};
+const receiveSizes: { [id: string]: number } = {};
+
+interface Message {
+  id: string;
+  data: string;
+}
+
+const messageProcessing = async (message: Message): Promise<void> => {
+  console.log(`Processed task ${message.id}: ${message.data}`);
+
+  const keyPair = store.select((state) => state.keyPair).get();
+  const clients = store.select((state) => state.clients).get();
+  const client = clients.find((client) => client.clientId === message.id);
+  if (!client) throw new Error("Client is missing!");
+
+  const receiveFiles = store.select((state) => state.receiveFiles).get();
+  const receiveFile = receiveFiles[message.id] ?? undefined;
+
+  const receiveBuffer = receiveBuffers[message.id] ?? [];
+  console.log("reeeeeeeeeee bufff", receiveBuffer);
+
+  let receivedSize = receiveSizes[message.id] ?? 0;
+
+  const publicKey = await window.crypto.subtle.importKey(
+    "jwk",
+    client.publicKey,
+    {
+      name: "ECDH",
+      namedCurve: "P-384",
+    },
+    true,
+    [],
+  );
+
+  const secretKey = await deriveSecretKey(keyPair!.privateKey, publicKey);
+
+  const WSData = JSON.parse(message.data);
+
+  const data = await decryptMessage(
+    secretKey,
+    new Uint8Array(WSData.initializationVector),
+    new Uint8Array(WSData.encryptedChunk),
+  );
+  if (!data) {
+    throw new Error("Failed to decrypt!!!");
+  }
+
+  if (receiveFile === undefined) {
+    try {
+      const file = JSON.parse(new TextDecoder().decode(data));
+      store.trigger.setReceiveFile({
+        peerId: message.id,
+        file,
+      });
+      return;
+    } catch (e) {
+      console.log(e);
+      return;
+    }
+  } else {
+    receiveBuffer.push(data);
+    receivedSize += data.byteLength;
+
+    if (receivedSize == receiveFile["size"]) {
+      const blob = new Blob(receiveBuffer, {
+        type: receiveFile["type"],
+      });
+      const fileURL = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = fileURL;
+      a.download = receiveFile.name || "download";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(fileURL);
+      receiveBuffers[message.id] = [];
+      receiveSizes[message.id] = 0;
+
+      return;
+    }
+    receiveBuffers[message.id] = receiveBuffer;
+    receiveSizes[message.id] = receivedSize;
+  }
+};
+
+class FIFOQueue<T> {
+  private queue: T[] = [];
+  private isProcessing: boolean = false;
+
+  constructor(private processItem: (item: T) => Promise<void>) {}
+
+  enqueue(item: T): void {
+    this.queue.push(item);
+    if (!this.isProcessing) {
+      this.processQueue();
+    }
+  }
+
+  private async processQueue(): Promise<void> {
+    this.isProcessing = true;
+
+    while (this.queue.length > 0) {
+      const item = this.queue.shift();
+      if (item) {
+        try {
+          await this.processItem(item);
+        } catch (error) {
+          console.error("Error processing item:", error);
+        }
+      }
+    }
+
+    this.isProcessing = false;
+  }
+}
+
+const messageQueue = new FIFOQueue<Message>(messageProcessing);
+
 export const store = createStore({
   context: {
     websocketConnectionStatus: "init" as
@@ -98,9 +214,6 @@ export const store = createStore({
     roomId: "",
     keyPair: undefined as CryptoKeyPair | undefined,
     clients: [] as Clients,
-    receivedFiles: [] as ReceivedFiles[],
-    receiveBuffers: {} as { [id: string]: BlobPart[] },
-    receiveSizes: {} as { [id: string]: number },
     receiveFiles: {} as {
       [id: string]: { name: string; size: number; type: string } | undefined;
     },
@@ -163,53 +276,12 @@ export const store = createStore({
         [event.peerId]: event.connection,
       },
     }),
-    newFile: (
-      context,
-      event: { peerId: string; fileURL: string; fileName: string },
-    ) => {
-      return {
-        ...context,
-        receiveBuffers: {
-          ...context.receiveBuffers,
-          [event.peerId]: [],
-        },
-        receiveSizes: {
-          ...context.receiveSizes,
-          [event.peerId]: 0,
-        },
-        receiveFiles: {
-          ...context.receiveFiles,
-          [event.peerId]: undefined,
-        },
-        receivedFiles: [
-          ...context.receivedFiles,
-          { url: event.fileURL, name: event.fileName },
-        ],
-      };
-    },
-    pushToReceiveBuffer: (
+    setReceiveFile: (
       context,
       event: {
         peerId: string;
-        receiveBuffer: BlobPart[];
-        receivedSize: number;
+        file: { name: string; size: number; type: string } | undefined;
       },
-    ) => {
-      return {
-        ...context,
-        receiveBuffers: {
-          ...context.receiveBuffers,
-          [event.peerId]: event.receiveBuffer,
-        },
-        receiveSizes: {
-          ...context.receiveSizes,
-          [event.peerId]: event.receivedSize,
-        },
-      };
-    },
-    setReceiveFile: (
-      context,
-      event: { peerId: string; file: File | undefined },
     ) => ({
       ...context,
       receiveFiles: {
@@ -260,80 +332,8 @@ export const store = createStore({
 
           dataChannel.onopen = () => console.log("Connected to sender peer.");
 
-          dataChannel.onmessage = async (e) => {
-            const receiveBuffers = store
-              .select((state) => state.receiveBuffers)
-              .get();
-            const receiveBuffer = receiveBuffers[client.clientId] ?? [];
-
-            const receiveSizes = store
-              .select((state) => state.receiveSizes)
-              .get();
-            let receivedSize = receiveSizes[client.clientId] ?? 0;
-
-            const receiveFiles = store
-              .select((state) => state.receiveFiles)
-              .get();
-            const receiveFile = receiveFiles[client.clientId] ?? undefined;
-
-            const publicKey = await window.crypto.subtle.importKey(
-              "jwk",
-              client.publicKey,
-              {
-                name: "ECDH",
-                namedCurve: "P-384",
-              },
-              true,
-              [],
-            );
-
-            const secretKey = await deriveSecretKey(
-              context.keyPair!.privateKey,
-              publicKey,
-            );
-
-            const WSData = JSON.parse(e.data);
-
-            const data = await decryptMessage(
-              secretKey,
-              new Uint8Array(WSData.initializationVector),
-              new Uint8Array(WSData.encryptedChunk),
-            );
-            if (!data) {
-              throw new Error("Failed to decrypt!!!");
-            }
-
-            if (receiveFile === undefined) {
-              console.log(receiveFile, data);
-              const file = JSON.parse(new TextDecoder().decode(data));
-              store.trigger.setReceiveFile({
-                peerId: client.clientId,
-                file,
-              });
-              return;
-            }
-
-            receiveBuffer.push(data);
-            receivedSize += data.byteLength;
-
-            if (receivedSize == receiveFile["size"]) {
-              const blob = new Blob(context.receiveBuffers[client.clientId], {
-                type: receiveFile["type"],
-              });
-              const fileURL = URL.createObjectURL(blob);
-              store.trigger.newFile({
-                peerId: client.clientId,
-                fileURL,
-                fileName: receiveFile.name,
-              });
-              return;
-            }
-
-            store.trigger.pushToReceiveBuffer({
-              peerId: client.clientId,
-              receivedSize,
-              receiveBuffer,
-            });
+          dataChannel.onmessage = (e) => {
+            messageQueue.enqueue({ id: client.clientId, data: e.data });
           };
 
           store.trigger.setFileChannelConnection({
@@ -378,7 +378,7 @@ export const store = createStore({
 
       enqueue.effect(async () => {
         let offset = 0;
-        const maxChunkSize = 16384;
+        const maxChunkSize = 14000; //16384;
 
         const client = context.clients.find(
           (client) => client.clientId === event.peerId,
@@ -427,6 +427,8 @@ export const store = createStore({
           );
         }
 
+        await new Promise((res) => setTimeout(res, 1000));
+
         await event.file.arrayBuffer().then(async (buffer) => {
           const send = async () => {
             while (buffer.byteLength) {
@@ -434,9 +436,9 @@ export const store = createStore({
                 dataChannel.bufferedAmount >
                 dataChannel.bufferedAmountLowThreshold
               ) {
-                dataChannel.onbufferedamountlow = () => {
+                dataChannel.onbufferedamountlow = async () => {
                   dataChannel.onbufferedamountlow = null;
-                  send();
+                  await send();
                 };
                 return;
               }
@@ -497,6 +499,8 @@ export const store = createStore({
   },
 });
 
+store.subscribe((state) => console.log(state.context));
+
 export const useClientId = () =>
   useSelector(store, (state) => state.context.clientId);
 export const useRoomId = () =>
@@ -505,5 +509,3 @@ export const useClients = () =>
   useSelector(store, (state) => state.context.clients);
 export const useSocketState = () =>
   useSelector(store, (state) => state.context.websocketConnectionStatus);
-export const useNewFiles = () =>
-  useSelector(store, (state) => state.context.receivedFiles);
