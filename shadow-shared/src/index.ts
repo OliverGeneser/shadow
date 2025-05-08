@@ -86,14 +86,16 @@ export const leaveResponseSchema = z
   })
   .strict();
 
-export const clientsSchema = z.array(
-  z
-    .object({
-      clientId: z.string(),
-      publicKey: z.custom<JsonWebKey>(),
-    })
-    .strict(),
-);
+export const clientSchema = z
+  .object({
+    clientId: z.string(),
+    publicKey: z.custom<JsonWebKey>(),
+    activity: z.enum(["sending", "receiving", "pending"]).default("pending"),
+    progress: z.number().optional(),
+  })
+  .strict();
+
+export const clientsSchema = z.array(clientSchema);
 
 export const clientsResponseSchema = z
   .object({
@@ -140,6 +142,8 @@ export type CreateOrJoinResponse = z.infer<typeof createOrJoinResponse>;
 export type LeaveResponse = z.infer<typeof leaveResponseSchema>;
 
 export type ClientsResponse = z.infer<typeof clientsResponseSchema>;
+
+export type Client = z.infer<typeof clientSchema>;
 
 export type Clients = z.infer<typeof clientsSchema>;
 
