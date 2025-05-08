@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Textarea } from "./textarea";
 import { button } from "./button";
+import { store } from "../../stores/connection-store";
 
 type Message = {
   id: number;
@@ -28,8 +29,11 @@ export function Chat() {
   }, [messages]);
 
   const sendMessage = () => {
-    if (!input.trim()) return;
-    //send message .then()=>setMessages
+    const message = input.trim();
+    if (!message) return;
+    store.trigger.sendChatMessage({
+      message: message,
+    });
     setMessages([
       ...messages,
       { id: messages.length + 1, user: "You", text: input, isUser: true },
@@ -45,7 +49,7 @@ export function Chat() {
   };
 
   return (
-    <div className="mx-auto flex h-full w-72 flex-col rounded-l-lg border border-gray-300  bg-gray-50 shadow-lg sm:w-96">
+    <div className="mx-auto flex h-full w-72 flex-col rounded-l-lg border border-gray-300 bg-gray-50 shadow-lg sm:w-96">
       <div className="flex-1 overflow-y-auto p-4">
         <div className="space-y-3">
           {messages.map((msg) => (

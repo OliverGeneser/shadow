@@ -15,10 +15,7 @@ export interface rtcConnectionsArray {
 interface WebRTCConnections {
   [key: string]: RTCPeerConnection;
 }
-interface DataChannelConnections {
-  [key: string]: RTCDataChannel;
-}
-
+type DataChannelConnections = Record<string, RTCDataChannel>;
 export enum ReadyState {
   UNINSTANTIATED = -1,
   CONNECTING = 0,
@@ -301,6 +298,40 @@ export const store = createStore({
         },
       };
     },
+    removeFileChannelConnection: (context, event: { peerId: string }) => {
+      const { [event.peerId]: _, ...updatedConnections } =
+        context.fileChannelConnections;
+
+      return {
+        ...context,
+        fileChannelConnections: {
+          ...updatedConnections,
+        },
+      };
+    },
+    setChatChannelConnection: (
+      context,
+      event: { peerId: string; dataChannel: RTCDataChannel },
+    ) => {
+      return {
+        ...context,
+        chatChannelConnections: {
+          ...context.chatChannelConnections,
+          [event.peerId]: event.dataChannel,
+        },
+      };
+    },
+    removeChatChannelConnection: (context, event: { peerId: string }) => {
+      const { [event.peerId]: _, ...updatedConnections } =
+        context.chatChannelConnections;
+
+      return {
+        ...context,
+        chatChannelConnections: {
+          ...updatedConnections,
+        },
+      };
+    },
     setClients: (context, event: { clients: Clients }) => {
       const oldClientIds = new Set(
         context.clients.map((client) => client.clientId),
@@ -310,6 +341,7 @@ export const store = createStore({
       );
 
       const connections: WebRTCConnections = {};
+      const dataChannelConnecions: DataChannelConnections = {};
 
       diffClients.forEach((client) => {
         const localPeer = new RTCPeerConnection(webrtcConfig);
@@ -327,37 +359,61 @@ export const store = createStore({
 
         localPeer.ondatachannel = async (e) => {
           const dataChannel = e.channel;
-          dataChannel.binaryType = "arraybuffer";
-          dataChannel.bufferedAmountLowThreshold = 0;
+          switch (dataChannel.label) {
+            case "chatChannel":
+              setUpDataChannel(dataChannel, client.clientId);
+              store.trigger.setChatChannelConnection({
+                peerId: client.clientId,
+                dataChannel: dataChannel,
+              });
+              break;
+            case "fileChannel":
+              dataChannel.binaryType = "arraybuffer";
+              dataChannel.bufferedAmountLowThreshold = 0;
 
-          dataChannel.onopen = () => console.log("Connected to sender peer.");
+              dataChannel.onopen = () =>
+                console.log("Connected to sender peer.");
 
-          dataChannel.onmessage = (e) => {
-            messageQueue.enqueue({ id: client.clientId, data: e.data });
-          };
+              dataChannel.onclose = () =>
+                store.trigger.removeFileChannelConnection({
+                  peerId: client.clientId,
+                });
 
-          store.trigger.setFileChannelConnection({
-            peerId: client.clientId,
-            dataChannel: dataChannel,
-          });
-        };
-
-        localPeer.onnegotiationneeded = async () => {
-          try {
-            await localPeer.setLocalDescription(await localPeer.createOffer());
-
-            if (localPeer.localDescription !== null) {
-              const message: SignalOfferData = {
-                type: "signal-offer",
-                to: client.clientId,
-                signal: localPeer.localDescription,
+              dataChannel.onmessage = (e) => {
+                messageQueue.enqueue({ id: client.clientId, data: e.data });
               };
-              await sendMessageWithRetry(JSON.stringify(message));
-            }
-          } catch (err) {
-            console.error(err);
+
+              store.trigger.setFileChannelConnection({
+                peerId: client.clientId,
+                dataChannel: dataChannel,
+              });
           }
         };
+
+        if (oldClientIds.size > 0) {
+          localPeer.onnegotiationneeded = async () => {
+            try {
+              await localPeer.setLocalDescription(
+                await localPeer.createOffer(),
+              );
+
+              if (localPeer.localDescription !== null) {
+                const message: SignalOfferData = {
+                  type: "signal-offer",
+                  to: client.clientId,
+                  signal: localPeer.localDescription,
+                };
+                await sendMessageWithRetry(JSON.stringify(message));
+              }
+            } catch (err) {
+              console.error(err);
+            }
+          };
+
+          const dataChannel = localPeer.createDataChannel("chatChannel");
+          setUpDataChannel(dataChannel, client.clientId);
+          dataChannelConnecions[client.clientId] = dataChannel;
+        }
 
         connections[client.clientId] = localPeer;
       });
@@ -366,6 +422,10 @@ export const store = createStore({
         ...context,
         clients: event.clients,
         webrtcConnections: { ...context.webrtcConnections, ...connections },
+        chatChannelConnections: {
+          ...context.chatChannelConnections,
+          ...dataChannelConnecions,
+        },
       };
     },
     sendFile: (context, event: { peerId: string; file: File }, enqueue) => {
@@ -473,20 +533,21 @@ export const store = createStore({
         });
       });
     },
+    sendChatMessage: (context, event: { message: string }) => {
+      for (const to in context.chatChannelConnections) {
+        const dataChannel = context.chatChannelConnections[to];
+        dataChannel.send(event.message);
+      }
+    },
     setupConnection: (context, event: { peerId: string }) => {
-      console.log("Setting up data channel connection...");
+      console.log("Setting up file channel connection...");
       let localPeer;
       if (context.webrtcConnections[event.peerId]) {
         localPeer = context.webrtcConnections[event.peerId];
       } else {
         return context;
       }
-
       const dataChannel = localPeer.createDataChannel("fileChannel");
-      dataChannel.binaryType = "arraybuffer";
-
-      dataChannel.bufferedAmountLowThreshold = 0;
-      dataChannel.onopen = () => console.log("Connected to receiver peer.");
 
       return {
         ...context,
@@ -499,7 +560,23 @@ export const store = createStore({
   },
 });
 
-store.subscribe((state) => console.log(state.context));
+const setUpDataChannel = (dataChannel: RTCDataChannel, peerId: string) => {
+  dataChannel.binaryType = "arraybuffer";
+  dataChannel.bufferedAmountLowThreshold = 0;
+
+  dataChannel.onopen = () =>
+    console.log("Connected to data channel receiver peer.");
+
+  dataChannel.onclose = () => {
+    store.trigger.removeChatChannelConnection({
+      peerId,
+    });
+  };
+
+  dataChannel.onmessage = async (e) => {
+    console.log("Receiving message:", e.data);
+  };
+};
 
 export const useClientId = () =>
   useSelector(store, (state) => state.context.clientId);
