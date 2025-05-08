@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { v4 as uuidv4, validate as uuidValidate } from "uuid";
-import { store, useClientId, useClients } from "./stores/connection-store";
+import { store } from "./stores/connection-store";
 import { Chat } from "./components/UI/chat";
 import { UserNetwork } from "./components/UI/userNetwork";
 import { button } from "./components/UI/button";
@@ -12,8 +12,6 @@ import { faComments } from "@fortawesome/free-solid-svg-icons";
 function RoomView() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const client = useClientId();
-  const clients = useClients();
 
   useEffect(() => {
     if (!uuidValidate(id) || id === undefined) {
@@ -25,23 +23,11 @@ function RoomView() {
     }
   }, [id, navigate]);
 
-  const makeConnection = (id: string) => {
-    store.send({ type: "setupConnection", peerId: id });
-  };
-
   return (
     <div className="relative flex h-screen w-full overflow-hidden bg-gray-600">
       <div className="absolute inset-0 w-screen origin-bottom-left -rotate-12 transform bg-gradient-to-br from-gray-700 to-gray-600" />
 
-      {client ? (
-        <UserNetwork
-          me={{ id: 0, userName: client }}
-          users={clients.map((client, index) => {
-            return { id: index + 1, userName: client.clientId };
-          })}
-          onClick={makeConnection}
-        />
-      ) : null}
+      <UserNetwork/>
 
       <ChatPanel open={window.innerWidth > 1000} />
 
