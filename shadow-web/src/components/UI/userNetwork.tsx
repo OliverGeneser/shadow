@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import ForceGraph2D, { NodeObject } from "react-force-graph-2d";
 
-import { store, useClientId, useClients } from "../../stores/connection-store";
+import {
+  store,
+  useClientId,
+  useClients,
+  useSendersAwaitingApproval,
+} from "../../stores/connection-store";
 import { Client, colorMap } from "shadow-shared";
 import Modal from "./modal";
 
@@ -9,15 +14,17 @@ export function UserNetwork() {
   const boxRef = useRef<HTMLDivElement>(null);
   const graphRef = useRef<any | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const sendersAwaitingApproval = useSendersAwaitingApproval();
 
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const [showAcceptTransfer, setShowAcceptTransfer] = useState(false);
 
   const [selectedNode, setSelectedNode] = useState<Client>();
   const [graphData, setGraphData] = useState<{
     nodes: Client[];
     links: {
-        source: string;
-        target: string;
+      source: string;
+      target: string;
     }[];
   }>();
 
@@ -38,6 +45,15 @@ export function UserNetwork() {
   }, []);
 
   useEffect(() => {
+    if (sendersAwaitingApproval.length > 0) {
+      setShowAcceptTransfer(true);
+    } else {
+      setShowAcceptTransfer(false);
+    }
+    console.log("new awaiting approval:", sendersAwaitingApproval);
+  }, [sendersAwaitingApproval]);
+
+  useEffect(() => {
     if (!graphRef.current) return;
     graphRef.current.d3Force("charge").strength(-100);
     const collisionForce = graphRef.current.d3Force("collision");
@@ -50,18 +66,18 @@ export function UserNetwork() {
 
   useEffect(() => {
     if (!clientId) return;
-  
+
     setGraphData((prevData) => {
       const prevNodesMap = new Map(
-        (prevData?.nodes ?? []).map((n) => [n.clientId, n])
+        (prevData?.nodes ?? []).map((n) => [n.clientId, n]),
       );
-  
+
       const allClients: Client[] = [{ clientId: clientId }, ...(clients ?? [])];
-  
+
       const nodes = allClients.map((c) => {
         const existing = prevNodesMap.get(c.clientId);
         if (!existing) return { ...c };
-  
+
         const updated: Client = { ...existing };
         if (c.activity !== existing.activity) {
           updated.activity = c.activity;
@@ -69,16 +85,16 @@ export function UserNetwork() {
         if (c.progress !== existing.progress) {
           updated.progress = c.progress;
         }
-  
+
         return updated;
       });
-  
+
       const links =
         clients?.map((c) => ({
           source: clientId,
           target: c.clientId,
         })) ?? [];
-  
+
       return { nodes, links };
     });
   }, [clients, clientId]);
@@ -95,24 +111,34 @@ export function UserNetwork() {
 
     //first open when connection is accepted
     fileInputRef.current?.click();
-    store.trigger.setClientActivity({clientId: node.clientId, activity: "pending"});
+    store.trigger.setClientActivity({
+      clientId: node.clientId,
+      activity: "pending",
+    });
     store.send({ type: "setupConnection", peerId: node.clientId });
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (files && files.length > 0 && selectedNode) {
-      store.trigger.setClientActivity({clientId:selectedNode.clientId, activity: "sending"});
+      store.trigger.setClientActivity({
+        clientId: selectedNode.clientId,
+        activity: "sending",
+      });
       store.send({
         type: "sendFile",
         file: files[0],
+        fileId: crypto.randomUUID(),
         peerId: selectedNode.clientId,
       });
     }
   };
 
   const cancelTransferForNode = (node: Client) => {
-    store.trigger.setClientActivity({clientId: node.clientId, activity: undefined});
+    store.trigger.setClientActivity({
+      clientId: node.clientId,
+      activity: undefined,
+    });
     //todo cancel file transfer
     setSelectedNode(undefined);
     setShowCancelModal(false);
@@ -127,10 +153,10 @@ export function UserNetwork() {
         type="file"
         className="hidden"
         ref={fileInputRef}
+        onClick={(event) => (event.currentTarget.value = "")}
         onChange={handleFileChange}
-        multiple
       />
-      {clientId &&
+      {clientId && (
         <ForceGraph2D
           ref={graphRef}
           graphData={graphData}
@@ -152,11 +178,11 @@ export function UserNetwork() {
             const circleColor = colorMap[color] || "#3b82f6";
             const avatarSize = node.clientId === clientId ? 10 : 8;
 
-              // Draw node
-              ctx.beginPath();
-              ctx.arc(node.x!, node.y!, avatarSize, 0, 2 * Math.PI);
-              ctx.fillStyle = circleColor;
-              ctx.fill();
+            // Draw node
+            ctx.beginPath();
+            ctx.arc(node.x!, node.y!, avatarSize, 0, 2 * Math.PI);
+            ctx.fillStyle = circleColor;
+            ctx.fill();
 
             // Draw text
             ctx.font = `italic ${fontSize * 0.8}px Sans-Serif`;
@@ -174,51 +200,50 @@ export function UserNetwork() {
             if (node.activity !== undefined && node.clientId !== clientId) {
               const ringRadius = avatarSize + 2.5;
 
-                // indicating circle
-                ctx.beginPath();
-                ctx.arc(node.x!, node.y!, ringRadius, 0, 2 * Math.PI);
-                ctx.strokeStyle =
-                  node.activity === "pending"
-                    ? "#3b82f6"
-                    : node.activity === "sending"
+              // indicating circle
+              ctx.beginPath();
+              ctx.arc(node.x!, node.y!, ringRadius, 0, 2 * Math.PI);
+              ctx.strokeStyle =
+                node.activity === "pending"
+                  ? "#3b82f6"
+                  : node.activity === "sending"
                     ? "#22c55e"
                     : "#f97316";
-                ctx.lineWidth = 2 / globalScale;
+              ctx.lineWidth = 2 / globalScale;
+              ctx.stroke();
+
+              if (
+                node.activity === "sending" ||
+                node.activity === "receiving"
+              ) {
+                //progress
+                const progressRadius = avatarSize + 1.5;
+
+                // Gray background
+                ctx.beginPath();
+                ctx.arc(node.x!, node.y!, progressRadius, 0, 2 * Math.PI);
+                ctx.strokeStyle = "rgba(255,255,255,0.3)";
+                ctx.lineWidth = 3 / globalScale;
                 ctx.stroke();
 
-                if (node.activity === "sending" || node.activity === "receiving") {
-                  //progress
-                  const progressRadius = avatarSize + 1.5;
-
-                  // Gray background
-                  ctx.beginPath();
-                  ctx.arc(node.x!, node.y!, progressRadius, 0, 2 * Math.PI);
-                  ctx.strokeStyle = "rgba(255,255,255,0.3)";
-                  ctx.lineWidth = 3 / globalScale;
-                  ctx.stroke();
-
-                  // Blue circle
-                  ctx.beginPath();
-                  ctx.arc(
-                    node.x!,
-                    node.y!,
-                    progressRadius,
-                    -Math.PI / 2,
-                    -Math.PI / 2 + (2 * Math.PI * (node.progress??0)) / 100,
-                  );
-                  ctx.strokeStyle = "#3b82f6";
-                  ctx.lineWidth = 3 / globalScale;
-                  ctx.stroke();
-                }
+                // Blue circle
+                ctx.beginPath();
+                ctx.arc(
+                  node.x!,
+                  node.y!,
+                  progressRadius,
+                  -Math.PI / 2,
+                  -Math.PI / 2 + (2 * Math.PI * (node.progress ?? 0)) / 100,
+                );
+                ctx.strokeStyle = "#3b82f6";
+                ctx.lineWidth = 3 / globalScale;
+                ctx.stroke();
               }
             }
-          }
+          }}
         />
-      }
-      <Modal
-        text="Cancel process?"
-        isOpen={showCancelModal}
-      >
+      )}
+      <Modal text="Cancel process?" isOpen={showCancelModal}>
         <button
           onClick={() => {
             if (selectedNode) cancelTransferForNode(selectedNode);
@@ -234,6 +259,45 @@ export function UserNetwork() {
           Close
         </button>
       </Modal>
+      {sendersAwaitingApproval.map((s) => (
+        <Modal
+          text="Accept transfer?"
+          isOpen={showAcceptTransfer}
+          key={s.fileId}
+        >
+          <div>
+            <div className="text-white">
+              User {s.peerId ?? ""} wants to send you the following file:{" "}
+              {s.fileName}
+            </div>
+            <div className="mt-4">
+              <button
+                onClick={() => {
+                  store.trigger.acceptOrDenyFileTransfer({
+                    fileId: s.fileId,
+                    accepted: true,
+                  });
+                }}
+                className="cursor-pointer rounded-xl bg-green-500 px-4 py-2 text-white transition hover:bg-green-600"
+              >
+                Accept
+              </button>
+
+              <button
+                onClick={() =>
+                  store.trigger.acceptOrDenyFileTransfer({
+                    fileId: s.fileId,
+                    accepted: false,
+                  })
+                }
+                className="cursor-pointer rounded-xl bg-red-500 px-4 py-2 text-white transition hover:bg-red-600"
+              >
+                Deny
+              </button>
+            </div>
+          </div>
+        </Modal>
+      ))}
     </div>
   );
 }

@@ -8,6 +8,7 @@ import {
   SignalOfferData,
   activity,
 } from "shadow-shared";
+import { UUID } from "crypto";
 
 export interface rtcConnectionsArray {
   clientId: string;
@@ -136,12 +137,44 @@ const messageProcessing = async (message: Message): Promise<void> => {
     throw new Error("Failed to decrypt!!!");
   }
 
-  if (receiveFile === undefined) {
+  let file;
+
+  try {
+    file = JSON.parse(new TextDecoder().decode(data));
+  } catch (_) {
+    file = undefined;
+  }
+
+  if (file?.packetType === "transferAnswer") {
     try {
-      const file = JSON.parse(new TextDecoder().decode(data));
+      if (file.accepted === true) {
+        store.trigger.removeAwaitingApproval({
+          fileId: file.fileId,
+        });
+      } else {
+        const fileChannels = store
+          .select((state) => state.fileChannelConnections)
+          .get();
+        fileChannels[client.clientId].close();
+        store.trigger.removeAwaitingApproval({
+          fileId: file.fileId,
+        });
+      }
+      return;
+    } catch (e) {
+      console.log(e);
+      return;
+    }
+  } else if (file?.packetType === "fileMetadata") {
+    try {
       store.trigger.setReceiveFile({
         peerId: message.id,
         file,
+      });
+      store.trigger.setSenderAwaitingApproval({
+        peerId: message.id,
+        fileId: file.id,
+        fileName: file.name,
       });
       return;
     } catch (e) {
@@ -149,28 +182,35 @@ const messageProcessing = async (message: Message): Promise<void> => {
       return;
     }
   } else {
-    receiveBuffer.push(data);
-    receivedSize += data.byteLength;
+    const sendersAwaitingApproval = store
+      .select((state) => state.sendersAwaitingApproval)
+      .get();
+    if (!sendersAwaitingApproval.some((s) => s.peerId === message.id)) {
+      if (receiveFile !== undefined) {
+        receiveBuffer.push(data);
+        receivedSize += data.byteLength;
 
-    if (receivedSize == receiveFile["size"]) {
-      const blob = new Blob(receiveBuffer, {
-        type: receiveFile["type"],
-      });
-      const fileURL = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = fileURL;
-      a.download = receiveFile.name || "download";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(fileURL);
-      receiveBuffers[message.id] = [];
-      receiveSizes[message.id] = 0;
+        if (receivedSize == receiveFile["size"]) {
+          const blob = new Blob(receiveBuffer, {
+            type: receiveFile["type"],
+          });
+          const fileURL = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = fileURL;
+          a.download = receiveFile.name || "download";
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(fileURL);
+          receiveBuffers[message.id] = [];
+          receiveSizes[message.id] = 0;
 
-      return;
+          return;
+        }
+        receiveBuffers[message.id] = receiveBuffer;
+        receiveSizes[message.id] = receivedSize;
+      }
     }
-    receiveBuffers[message.id] = receiveBuffer;
-    receiveSizes[message.id] = receivedSize;
   }
 };
 
@@ -264,6 +304,12 @@ export const store = createStore({
     webrtcConnections: {} as WebRTCConnections,
     fileChannelConnections: {} as DataChannelConnections,
     chatChannelConnections: {} as DataChannelConnections,
+    sendersAwaitingApproval: [] as {
+      peerId: string;
+      fileId: UUID;
+      fileName: string;
+    }[],
+    awaitingApprovals: [] as { peerId: string; fileId: UUID }[],
   },
   on: {
     setKeyPair: (context, event: { keyPair: CryptoKeyPair }) => ({
@@ -369,6 +415,129 @@ export const store = createStore({
         },
       };
     },
+    setAwaitingApprovals: (
+      context,
+      event: { peerId: string; fileId: UUID },
+    ) => {
+      return {
+        ...context,
+        awaitingApprovals: [
+          ...context.awaitingApprovals,
+          { peerId: event.peerId, fileId: event.fileId },
+        ],
+      };
+    },
+    removeAwaitingApproval: (context, event: { fileId: UUID }) => {
+      return {
+        ...context,
+        awaitingApprovals: [
+          ...context.awaitingApprovals.filter((s) => s.fileId !== event.fileId),
+        ],
+      };
+    },
+    setSenderAwaitingApproval: (
+      context,
+      event: { peerId: string; fileId: UUID; fileName: string },
+    ) => {
+      return {
+        ...context,
+        sendersAwaitingApproval: [
+          ...context.sendersAwaitingApproval,
+          {
+            peerId: event.peerId,
+            fileId: event.fileId,
+            fileName: event.fileName,
+          },
+        ],
+      };
+    },
+    removeSenderAwaitingApproval: (context, event: { fileId: UUID }) => {
+      return {
+        ...context,
+        sendersAwaitingApproval: [
+          ...context.sendersAwaitingApproval.filter(
+            (s) => s.fileId !== event.fileId,
+          ),
+        ],
+      };
+    },
+    acceptOrDenyFileTransfer: (
+      context,
+      event: { fileId: UUID; accepted: boolean },
+    ) => {
+      const connection = context.sendersAwaitingApproval.find(
+        (s) => s.fileId === event.fileId,
+      );
+
+      if (!connection) {
+        console.log("No sendersAwaitingApproval found");
+        return;
+      }
+
+      const dataChannel = context.fileChannelConnections[connection.peerId];
+      if (!dataChannel) {
+        console.log("No datachannel found");
+        return;
+      }
+
+      const encryptAndSend = async () => {
+        const client = context.clients.find(
+          (client) => client.clientId === connection.peerId,
+        );
+        if (!client) return context;
+
+        const publicKey = await window.crypto.subtle.importKey(
+          "jwk",
+          client.publicKey,
+          {
+            name: "ECDH",
+            namedCurve: "P-384",
+          },
+          true,
+          [],
+        );
+        const keyPair = store.select((state) => state.keyPair).get();
+
+        const secretKey = await deriveSecretKey(keyPair!.privateKey, publicKey);
+
+        const initializationVector = window.crypto.getRandomValues(
+          new Uint8Array(8),
+        );
+
+        const encryptedChunk = await encryptMessage(
+          secretKey,
+          initializationVector,
+          new TextEncoder().encode(
+            JSON.stringify({
+              packetType: "transferAnswer",
+              fileId: event.fileId,
+              accepted: event.accepted,
+            }),
+          ).buffer,
+        );
+        if (!encryptedChunk) {
+          throw new Error("Failed to encrypt!!!");
+        }
+
+        dataChannel.send(
+          JSON.stringify({
+            encryptedChunk: Array.from(new Uint8Array(encryptedChunk)),
+            initializationVector: Array.from(initializationVector),
+          }),
+        );
+      };
+
+      encryptAndSend();
+
+      return {
+        ...context,
+        sendersAwaitingApproval: [
+          ...context.sendersAwaitingApproval.filter(
+            (s) => s.fileId !== connection.fileId,
+          ),
+        ],
+      };
+    },
     setChatChannelConnection: (
       context,
       event: { peerId: string; dataChannel: RTCDataChannel },
@@ -428,21 +597,7 @@ export const store = createStore({
               });
               break;
             case "fileChannel":
-              dataChannel.binaryType = "arraybuffer";
-              dataChannel.bufferedAmountLowThreshold = 0;
-
-              dataChannel.onopen = () =>
-                console.log("Connected to sender peer.");
-
-              dataChannel.onclose = () =>
-                store.trigger.removeFileChannelConnection({
-                  peerId: client.clientId,
-                });
-
-              dataChannel.onmessage = (e) => {
-                messageQueue.enqueue({ id: client.clientId, data: e.data });
-              };
-
+              setUpFileChannel(dataChannel, client.clientId);
               store.trigger.setFileChannelConnection({
                 peerId: client.clientId,
                 dataChannel: dataChannel,
@@ -488,31 +643,41 @@ export const store = createStore({
         },
       };
     },
-    setClientActivity: (context, event: { clientId: string, activity: activity }) => {
+    setClientActivity: (
+      context,
+      event: { clientId: string; activity: activity },
+    ) => {
       const updatedClients = context.clients.map((client) =>
         client.clientId === event.clientId
           ? { ...client, activity: event.activity }
-          : client
+          : client,
       );
-    
+
       return {
         ...context,
         clients: updatedClients,
       };
     },
-    setClientProgress: (context, event: { clientId: string, progress: number|undefined }) => {
+    setClientProgress: (
+      context,
+      event: { clientId: string; progress: number | undefined },
+    ) => {
       const updatedClients = context.clients.map((client) =>
         client.clientId === event.clientId
           ? { ...client, progress: event.progress }
-          : client
+          : client,
       );
-    
+
       return {
         ...context,
         clients: updatedClients,
       };
     },
-    sendFile: (context, event: { peerId: string; file: File }, enqueue) => {
+    sendFile: (
+      context,
+      event: { peerId: string; file: File; fileId: UUID },
+      enqueue,
+    ) => {
       let dataChannel;
       if (context.fileChannelConnections[event.peerId]) {
         dataChannel = context.fileChannelConnections[event.peerId];
@@ -553,6 +718,8 @@ export const store = createStore({
             initializationVector,
             new TextEncoder().encode(
               JSON.stringify({
+                packetType: "fileMetadata",
+                id: event.fileId,
                 name: event.file.name,
                 size: event.file.size,
                 type: event.file.type,
@@ -571,54 +738,73 @@ export const store = createStore({
           );
         }
 
-        await new Promise((res) => setTimeout(res, 1000));
-
-        await event.file.arrayBuffer().then(async (buffer) => {
-          const send = async () => {
-            while (buffer.byteLength) {
-              if (
-                dataChannel.bufferedAmount >
-                dataChannel.bufferedAmountLowThreshold
-              ) {
-                dataChannel.onbufferedamountlow = async () => {
-                  dataChannel.onbufferedamountlow = null;
-                  await send();
-                };
-                return;
-              }
-              const chunk = buffer.slice(0, maxChunkSize);
-              buffer = buffer.slice(maxChunkSize, buffer.byteLength);
-
-              const initializationVector = window.crypto.getRandomValues(
-                new Uint8Array(8),
-              );
-              const encryptedChunk = await encryptMessage(
-                secretKey,
-                initializationVector,
-                chunk,
-              );
-              if (!encryptedChunk) {
-                throw new Error("Failed to encrypt!!!");
-              }
-
-              dataChannel.send(
-                JSON.stringify({
-                  encryptedChunk: Array.from(new Uint8Array(encryptedChunk)),
-                  initializationVector: Array.from(initializationVector),
-                }),
-              );
-              offset += maxChunkSize;
-              const progress = (offset / event.file.size) * 100;
-              store.trigger.setClientProgress({clientId: event.peerId, progress})
-              if(progress>=100){
-                console.log("Done sending");
-                store.trigger.setClientProgress({clientId: event.peerId, progress: undefined});
-                store.trigger.setClientActivity({clientId: event.peerId, activity: undefined});
-              }
-            }
-          };
-          await send();
+        store.trigger.setAwaitingApprovals({
+          peerId: event.peerId,
+          fileId: event.fileId,
         });
+
+        await waitForFileAcceptance(store, event.peerId, event.fileId)
+          .then(async () => {
+            await event.file.arrayBuffer().then(async (buffer) => {
+              const send = async () => {
+                while (buffer.byteLength) {
+                  if (
+                    dataChannel.bufferedAmount >
+                    dataChannel.bufferedAmountLowThreshold
+                  ) {
+                    dataChannel.onbufferedamountlow = async () => {
+                      dataChannel.onbufferedamountlow = null;
+                      await send();
+                    };
+                    return;
+                  }
+                  const chunk = buffer.slice(0, maxChunkSize);
+                  buffer = buffer.slice(maxChunkSize, buffer.byteLength);
+
+                  const initializationVector = window.crypto.getRandomValues(
+                    new Uint8Array(8),
+                  );
+                  const encryptedChunk = await encryptMessage(
+                    secretKey,
+                    initializationVector,
+                    chunk,
+                  );
+                  if (!encryptedChunk) {
+                    throw new Error("Failed to encrypt!!!");
+                  }
+
+                  dataChannel.send(
+                    JSON.stringify({
+                      encryptedChunk: Array.from(
+                        new Uint8Array(encryptedChunk),
+                      ),
+                      initializationVector: Array.from(initializationVector),
+                    }),
+                  );
+                  offset += maxChunkSize;
+                  offset += maxChunkSize;
+                  const progress = (offset / event.file.size) * 100;
+                  store.trigger.setClientProgress({
+                    clientId: event.peerId,
+                    progress,
+                  });
+                  if (progress >= 100) {
+                    store.trigger.setClientProgress({
+                      clientId: event.peerId,
+                      progress: undefined,
+                    });
+                    store.trigger.setClientActivity({
+                      clientId: event.peerId,
+                      activity: undefined,
+                    });
+                  }
+                }
+              };
+
+              await send();
+            });
+          })
+          .catch(() => console.log("File transfer was denied"));
       });
     },
     sendChatMessage: (context, event: { message: string }, enqueue) => {
@@ -681,6 +867,7 @@ export const store = createStore({
         return context;
       }
       const dataChannel = localPeer.createDataChannel("fileChannel");
+      setUpFileChannel(dataChannel, event.peerId);
 
       console.log("peer", localPeer);
       return {
@@ -693,6 +880,8 @@ export const store = createStore({
     },
   },
 });
+
+type StoreType = typeof store;
 
 const setUpDataChannel = (dataChannel: RTCDataChannel, peerId: string) => {
   dataChannel.binaryType = "arraybuffer";
@@ -712,6 +901,43 @@ const setUpDataChannel = (dataChannel: RTCDataChannel, peerId: string) => {
   };
 };
 
+const setUpFileChannel = (dataChannel: RTCDataChannel, peerId: string) => {
+  dataChannel.binaryType = "arraybuffer";
+  dataChannel.bufferedAmountLowThreshold = 0;
+
+  dataChannel.onopen = () => console.log("Connected to file channel peer.");
+
+  dataChannel.onclose = () =>
+    store.trigger.removeFileChannelConnection({
+      peerId: peerId,
+    });
+
+  dataChannel.onmessage = (e) => {
+    messageQueue.enqueue({ id: peerId, data: e.data });
+  };
+};
+
+const waitForFileAcceptance = async (
+  store: StoreType,
+  peerId: string,
+  fileId: UUID,
+): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    const subscription = store.subscribe((state) => {
+      if (!state.context.awaitingApprovals.some((a) => a.fileId === fileId)) {
+        if (
+          state.context.fileChannelConnections[peerId] &&
+          state.context.fileChannelConnections[peerId].readyState === "open"
+        ) {
+          subscription.unsubscribe();
+          resolve();
+        } else {
+          reject();
+        }
+      }
+    });
+  });
+};
 
 export const useClientId = () =>
   useSelector(store, (state) => state.context.clientId);
@@ -725,3 +951,5 @@ export const useSocketState = () =>
   useSelector(store, (state) => state.context.websocketConnectionStatus);
 export const useChatMessages = () =>
   useSelector(store, (state) => state.context.chatMessages);
+export const useSendersAwaitingApproval = () =>
+  useSelector(store, (state) => state.context.sendersAwaitingApproval);

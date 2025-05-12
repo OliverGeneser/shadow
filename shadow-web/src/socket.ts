@@ -38,7 +38,6 @@ websocket.onmessage = async (event) => {
         } else {
           throw new Error("THERE is no WEBRTC CONNECTION for offer");
         }
-
         await localPeer.setRemoteDescription(msg.offer);
         await localPeer.setLocalDescription(await localPeer.createAnswer());
 
@@ -51,8 +50,7 @@ websocket.onmessage = async (event) => {
           websocket.send(JSON.stringify(message));
         }
 
-        store.send({
-          type: "setWebRTCConnection",
+        store.trigger.setWebRTCConnection({
           peerId: msg.from,
           connection: localPeer,
         });
