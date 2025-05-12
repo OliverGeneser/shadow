@@ -90,7 +90,7 @@ export const clientSchema = z
   .object({
     clientId: z.string(),
     publicKey: z.custom<JsonWebKey>(),
-    activity: z.enum(["sending", "receiving", "pending"]).default("pending"),
+    activity: z.enum(["sending", "receiving", "pending"]).optional(),
     progress: z.number().optional(),
   })
   .strict();

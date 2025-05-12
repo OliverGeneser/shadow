@@ -6,6 +6,7 @@ import {
   Clients,
   RoomData,
   SignalOfferData,
+  Client,
 } from "shadow-shared";
 
 export interface rtcConnectionsArray {
@@ -578,6 +579,21 @@ const setUpDataChannel = (dataChannel: RTCDataChannel, peerId: string) => {
     console.log("Receiving message:", e.data);
   };
 };
+
+export const useClient = () =>
+  useSelector(store, async (state) => {
+    if (!state.context.keyPair || !state.context.clientId) return undefined;
+    const client: Client = {
+      clientId: state.context.clientId,
+      publicKey: await window.crypto.subtle.exportKey(
+        "jwk",
+        state.context.keyPair.publicKey,
+      ),
+      activity: undefined,
+      progress: undefined,
+    };
+    return client;
+  });
 
 export const useClientId = () =>
   useSelector(store, (state) => state.context.clientId);
