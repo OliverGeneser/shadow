@@ -3,12 +3,15 @@ import ForceGraph2D, { NodeObject } from "react-force-graph-2d";
 
 import { store, useClientId, useClients } from "../../stores/connection-store";
 import { Client, colorMap } from "shadow-shared";
-import Popup from "./popup";
+import Modal from "./modal";
 
 export function UserNetwork() {
   const boxRef = useRef<HTMLDivElement>(null);
   const graphRef = useRef<any | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [showCancelModal, setShowCancelModal] = useState(false);
+
   const [selectedNode, setSelectedNode] = useState<Client>();
   const [graphData, setGraphData] = useState<{
     nodes: Client[];
@@ -76,8 +79,7 @@ export function UserNetwork() {
     setSelectedNode(node as Client);
 
     if (node.activity !== undefined) {
-      //cancel for this node/user
-      console.log("Clicked active transfer user ID:", node.clientId);
+      setShowCancelModal(true);
       return;
     }
 
@@ -104,11 +106,12 @@ export function UserNetwork() {
     }
   };
 
-  const cancelTransferForNode = (node: NodeObject) => {
+  const cancelTransferForNode = (node: Client) => {
     if (node.activity !== undefined) {
       console.log("Canceling transfer for user ID:", node.clientId);
       //set node/user activity to undefined
     }
+    setShowCancelModal(false);
   };
 
   return (
@@ -201,9 +204,9 @@ export function UserNetwork() {
           }
         }}
       />
-      <Popup
+      <Modal
         text="Cancel process?"
-        isOpen={selectedNode?.activity !== undefined}
+        isOpen={showCancelModal}
       >
         <button
           onClick={() => {
@@ -220,7 +223,7 @@ export function UserNetwork() {
         >
           Close
         </button>
-      </Popup>
+      </Modal>
     </div>
   );
 }

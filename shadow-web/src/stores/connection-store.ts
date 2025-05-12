@@ -6,7 +6,6 @@ import {
   Clients,
   RoomData,
   SignalOfferData,
-  Client,
 } from "shadow-shared";
 
 export interface rtcConnectionsArray {

@@ -1,4 +1,4 @@
-export default function Popup(props:{
+export default function Modal(props:{
   text: string;
   isOpen: boolean;
   children: React.ReactNode;
