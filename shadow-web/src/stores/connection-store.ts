@@ -12,6 +12,12 @@ export interface rtcConnectionsArray {
   clientId: string;
 }
 
+export type ChatMessages = {
+  id: number;
+  user: string;
+  text: string;
+}[];
+
 interface WebRTCConnections {
   [key: string]: RTCPeerConnection;
 }
@@ -167,6 +173,44 @@ const messageProcessing = async (message: Message): Promise<void> => {
   }
 };
 
+const chatMessageProcessing = async (message: Message): Promise<void> => {
+  const keyPair = store.select((state) => state.keyPair).get();
+  const clients = store.select((state) => state.clients).get();
+  const client = clients.find((client) => client.clientId === message.id);
+  if (!client) throw new Error("Client is missing!");
+
+  const publicKey = await window.crypto.subtle.importKey(
+    "jwk",
+    client.publicKey,
+    {
+      name: "ECDH",
+      namedCurve: "P-384",
+    },
+    true,
+    [],
+  );
+
+  const secretKey = await deriveSecretKey(keyPair!.privateKey, publicKey);
+
+  const WSData = JSON.parse(message.data);
+
+  const data = await decryptMessage(
+    secretKey,
+    new Uint8Array(WSData.initializationVector),
+    new Uint8Array(WSData.encryptedMessage),
+  );
+  if (!data) {
+    throw new Error("Failed to decrypt!!!");
+  }
+
+  const plainText = new TextDecoder().decode(data);
+
+  store.trigger.setNewChatMessage({
+    message: plainText,
+    peerId: message.id,
+  });
+};
+
 class FIFOQueue<T> {
   private queue: T[] = [];
   private isProcessing: boolean = false;
@@ -199,6 +243,7 @@ class FIFOQueue<T> {
 }
 
 const messageQueue = new FIFOQueue<Message>(messageProcessing);
+const chatMessageQueue = new FIFOQueue<Message>(chatMessageProcessing);
 
 export const store = createStore({
   context: {
@@ -210,6 +255,7 @@ export const store = createStore({
     clientId: undefined as string | undefined,
     roomId: "",
     keyPair: undefined as CryptoKeyPair | undefined,
+    chatMessages: [] as ChatMessages,
     clients: [] as Clients,
     receiveFiles: {} as {
       [id: string]: { name: string; size: number; type: string } | undefined;
@@ -273,6 +319,19 @@ export const store = createStore({
         [event.peerId]: event.connection,
       },
     }),
+    setNewChatMessage: (
+      context,
+      event: { peerId: string; message: string },
+    ) => {
+      const newId = context.chatMessages.length + 1;
+      return {
+        ...context,
+        chatMessages: [
+          ...context.chatMessages,
+          { id: newId, user: event.peerId, text: event.message },
+        ],
+      };
+    },
     setReceiveFile: (
       context,
       event: {
@@ -533,10 +592,55 @@ export const store = createStore({
         });
       });
     },
-    sendChatMessage: (context, event: { message: string }) => {
-      for (const to in context.chatChannelConnections) {
-        const dataChannel = context.chatChannelConnections[to];
-        dataChannel.send(event.message);
+    sendChatMessage: (context, event: { message: string }, enqueue) => {
+      for (const peerId in context.chatChannelConnections) {
+        const dataChannel = context.chatChannelConnections[peerId];
+
+        enqueue.effect(async () => {
+          const client = context.clients.find(
+            (client) => client.clientId === peerId,
+          );
+          if (!client) return context;
+
+          const publicKey = await window.crypto.subtle.importKey(
+            "jwk",
+            client.publicKey,
+            {
+              name: "ECDH",
+              namedCurve: "P-384",
+            },
+            true,
+            [],
+          );
+          const keyPair = store.select((state) => state.keyPair).get();
+
+          const secretKey = await deriveSecretKey(
+            keyPair!.privateKey,
+            publicKey,
+          );
+
+          if (dataChannel) {
+            const initializationVector = window.crypto.getRandomValues(
+              new Uint8Array(8),
+            );
+
+            const encryptedMessage = await encryptMessage(
+              secretKey,
+              initializationVector,
+              new TextEncoder().encode(event.message).buffer,
+            );
+            if (!encryptedMessage) {
+              throw new Error("Failed to encrypt!!!");
+            }
+
+            dataChannel.send(
+              JSON.stringify({
+                encryptedMessage: Array.from(new Uint8Array(encryptedMessage)),
+                initializationVector: Array.from(initializationVector),
+              }),
+            );
+          }
+        });
       }
     },
     setupConnection: (context, event: { peerId: string }) => {
@@ -575,7 +679,7 @@ const setUpDataChannel = (dataChannel: RTCDataChannel, peerId: string) => {
   };
 
   dataChannel.onmessage = async (e) => {
-    console.log("Receiving message:", e.data);
+    chatMessageQueue.enqueue({ id: peerId, data: e.data });
   };
 };
 
@@ -590,3 +694,5 @@ export const useClients = () =>
   useSelector(store, (state) => state.context.clients);
 export const useSocketState = () =>
   useSelector(store, (state) => state.context.websocketConnectionStatus);
+export const useChatMessages = () =>
+  useSelector(store, (state) => state.context.chatMessages);
