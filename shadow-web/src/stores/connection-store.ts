@@ -549,6 +549,7 @@ export const store = createStore({
       }
       const dataChannel = localPeer.createDataChannel("fileChannel");
 
+      console.log("peer", localPeer);
       return {
         ...context,
         fileChannelConnections: {
@@ -580,6 +581,8 @@ const setUpDataChannel = (dataChannel: RTCDataChannel, peerId: string) => {
 
 export const useClientId = () =>
   useSelector(store, (state) => state.context.clientId);
+export const useKeyPair = () =>
+  useSelector(store, (state) => state.context.keyPair);
 export const useRoomId = () =>
   useSelector(store, (state) => state.context.roomId);
 export const useClients = () =>
