@@ -500,6 +500,18 @@ export const store = createStore({
         clients: updatedClients,
       };
     },
+    setClientProgress: (context, event: { clientId: string, progress: number|undefined }) => {
+      const updatedClients = context.clients.map((client) =>
+        client.clientId === event.clientId
+          ? { ...client, progress: event.progress }
+          : client
+      );
+    
+      return {
+        ...context,
+        clients: updatedClients,
+      };
+    },
     sendFile: (context, event: { peerId: string; file: File }, enqueue) => {
       let dataChannel;
       if (context.fileChannelConnections[event.peerId]) {
@@ -596,11 +608,15 @@ export const store = createStore({
                 }),
               );
               offset += maxChunkSize;
-              console.log("Sent " + offset + " bytes.");
-              console.log(((offset / event.file.size) * 100).toFixed(1) + "%");
+              const progress = (offset / event.file.size) * 100;
+              store.trigger.setClientProgress({clientId: event.peerId, progress})
+              if(progress>=100){
+                console.log("Done sending");
+                store.trigger.setClientProgress({clientId: event.peerId, progress: undefined});
+                store.trigger.setClientActivity({clientId: event.peerId, activity: undefined});
+              }
             }
           };
-
           await send();
         });
       });

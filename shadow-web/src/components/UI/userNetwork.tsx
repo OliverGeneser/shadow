@@ -56,11 +56,21 @@ export function UserNetwork() {
         (prevData?.nodes ?? []).map((n) => [n.clientId, n])
       );
   
-      const allClients = [{ clientId: clientId }, ...(clients ?? [])];
+      const allClients: Client[] = [{ clientId: clientId }, ...(clients ?? [])];
   
       const nodes = allClients.map((c) => {
         const existing = prevNodesMap.get(c.clientId);
-        return existing ? { ...existing, ...c } : { ...c };
+        if (!existing) return { ...c };
+  
+        const updated: Client = { ...existing };
+        if (c.activity !== existing.activity) {
+          updated.activity = c.activity;
+        }
+        if (c.progress !== existing.progress) {
+          updated.progress = c.progress;
+        }
+  
+        return updated;
       });
   
       const links =
@@ -83,6 +93,7 @@ export function UserNetwork() {
       return;
     }
 
+    //first open when connection is accepted
     fileInputRef.current?.click();
     store.trigger.setClientActivity({clientId: node.clientId, activity: "pending"});
     store.send({ type: "setupConnection", peerId: node.clientId });
@@ -119,84 +130,87 @@ export function UserNetwork() {
         onChange={handleFileChange}
         multiple
       />
-      <ForceGraph2D
-        ref={graphRef}
-        graphData={graphData}
-        width={width}
-        height={height}
-        nodeId="clientId"
-        nodeVal={(node) => (node.clientId === clientId ? 10 : 8)}
-        onNodeClick={handleNodeClick}
-        linkColor={() => "rgba(255, 255, 255, 0.7)"}
-        linkWidth={1}
-        linkCanvasObjectMode="after"
-        enablePanInteraction={false}
-        enableZoomInteraction={false}
-        minZoom={5}
-        nodeCanvasObject={(node, ctx, globalScale) => {
-          const label = node.clientId ?? "";
-          const fontSize = 12 / globalScale;
-          const [color, animal] = label.split(" ");
-          const circleColor = colorMap[color] || "#3b82f6";
-          const avatarSize = node.clientId === clientId ? 10 : 8;
+      {clientId &&
+        <ForceGraph2D
+          ref={graphRef}
+          graphData={graphData}
+          width={width}
+          height={height}
+          nodeId="clientId"
+          nodeVal={(node) => (node.clientId === clientId ? 10 : 8)}
+          onNodeClick={handleNodeClick}
+          linkColor={() => "rgba(255, 255, 255, 0.7)"}
+          linkWidth={1}
+          linkCanvasObjectMode="after"
+          enablePanInteraction={false}
+          enableZoomInteraction={false}
+          minZoom={5}
+          nodeCanvasObject={(node, ctx, globalScale) => {
+            const label = node.clientId ?? "";
+            const fontSize = 12 / globalScale;
+            const [color, animal] = label.split(" ");
+            const circleColor = colorMap[color] || "#3b82f6";
+            const avatarSize = node.clientId === clientId ? 10 : 8;
 
-            // Draw node
-            ctx.beginPath();
-            ctx.arc(node.x!, node.y!, avatarSize, 0, 2 * Math.PI);
-            ctx.fillStyle = circleColor;
-            ctx.fill();
-
-          // Draw text
-          ctx.font = `italic ${fontSize * 0.8}px Sans-Serif`;
-          ctx.fillStyle = "#fff";
-          ctx.textAlign = "center";
-          ctx.fillText(`(${color})`, node.x!, node.y! - 2);
-          ctx.font = `bold ${fontSize}px Sans-Serif`;
-          ctx.fillText(animal, node.x!, node.y! + 1);
-          if (node.clientId === clientId) {
-            ctx.font = ` ${fontSize * 0.9}px Sans-Serif`;
-            ctx.fillText("You", node.x!, node.y! + 6);
-          }
-
-          // Indicating ring + progress
-          if (node.activity !== undefined && node.clientId !== clientId) {
-            const ringRadius = avatarSize + 2.5;
-
-              // indicating circle
+              // Draw node
               ctx.beginPath();
-              ctx.arc(node.x!, node.y!, ringRadius, 0, 2 * Math.PI);
-              ctx.strokeStyle =
-                node.activity === "sending" ? "#22c55e" : "#f97316";
-              ctx.lineWidth = 2 / globalScale;
-              ctx.stroke();
+              ctx.arc(node.x!, node.y!, avatarSize, 0, 2 * Math.PI);
+              ctx.fillStyle = circleColor;
+              ctx.fill();
 
-              if (node.activity === "sending" || node.activity === "receiving") {
-                //progress
-                const progressRadius = avatarSize + 1.5;
+            // Draw text
+            ctx.font = `italic ${fontSize * 0.8}px Sans-Serif`;
+            ctx.fillStyle = "#fff";
+            ctx.textAlign = "center";
+            ctx.fillText(`(${color})`, node.x!, node.y! - 2);
+            ctx.font = `bold ${fontSize}px Sans-Serif`;
+            ctx.fillText(animal, node.x!, node.y! + 1);
+            if (node.clientId === clientId) {
+              ctx.font = ` ${fontSize * 0.9}px Sans-Serif`;
+              ctx.fillText("You", node.x!, node.y! + 6);
+            }
 
-                // Gray background
+            // Indicating ring + progress
+            if (node.activity !== undefined && node.clientId !== clientId) {
+              const ringRadius = avatarSize + 2.5;
+
+                // indicating circle
                 ctx.beginPath();
-                ctx.arc(node.x!, node.y!, progressRadius, 0, 2 * Math.PI);
-                ctx.strokeStyle = "rgba(255,255,255,0.3)";
-                ctx.lineWidth = 3 / globalScale;
+                ctx.arc(node.x!, node.y!, ringRadius, 0, 2 * Math.PI);
+                ctx.strokeStyle =
+                  node.activity === "sending" ? "#22c55e" : "#f97316";
+                ctx.lineWidth = 2 / globalScale;
                 ctx.stroke();
 
-              // Blue circle
-              ctx.beginPath();
-              ctx.arc(
-                node.x!,
-                node.y!,
-                progressRadius,
-                -Math.PI / 2,
-                -Math.PI / 2 + (2 * Math.PI * (node.progress??0)) / 100,
-              );
-              ctx.strokeStyle = "#3b82f6";
-              ctx.lineWidth = 3 / globalScale;
-              ctx.stroke();
+                if (node.activity === "sending" || node.activity === "receiving") {
+                  //progress
+                  const progressRadius = avatarSize + 1.5;
+
+                  // Gray background
+                  ctx.beginPath();
+                  ctx.arc(node.x!, node.y!, progressRadius, 0, 2 * Math.PI);
+                  ctx.strokeStyle = "rgba(255,255,255,0.3)";
+                  ctx.lineWidth = 3 / globalScale;
+                  ctx.stroke();
+
+                  // Blue circle
+                  ctx.beginPath();
+                  ctx.arc(
+                    node.x!,
+                    node.y!,
+                    progressRadius,
+                    -Math.PI / 2,
+                    -Math.PI / 2 + (2 * Math.PI * (node.progress??0)) / 100,
+                  );
+                  ctx.strokeStyle = "#3b82f6";
+                  ctx.lineWidth = 3 / globalScale;
+                  ctx.stroke();
+                }
+              }
             }
           }
-        }}
-      />
+        />
+      }
       <Modal
         text="Cancel process?"
         isOpen={showCancelModal}
