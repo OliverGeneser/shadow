@@ -9,29 +9,18 @@ export function UserNetwork() {
   const boxRef = useRef<HTMLDivElement>(null);
   const graphRef = useRef<any | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [selectedNode, setSelectedNode] = useState<Client | undefined>(
-    undefined,
-  );
+  const [selectedNode, setSelectedNode] = useState<Client>();
+  const [graphData, setGraphData] = useState<{
+    nodes: Client[];
+    links: {
+        source: string;
+        target: string;
+    }[];
+  }>();
 
   const clients = useClients();
-  const client = useClientId();
+  const clientId = useClientId();
 
-  const me = { id: 0, userName: client };
-
-  const nodes = [
-    { id: me.id, userName: me.userName },
-    ...(clients.map((client, index) => ({
-      id: index + 1,
-      userName: client.clientId,
-    })) ?? []),
-  ];
-  const links =
-    clients.map((_, index) => ({
-      source: me.id,
-      target: index + 1,
-    })) ?? [];
-
-  const graphData = { nodes, links };
   const [width, setWidth] = useState(0);
   const [height, setHeight] = useState(0);
 
@@ -51,30 +40,52 @@ export function UserNetwork() {
     const collisionForce = graphRef.current.d3Force("collision");
     if (collisionForce) {
       collisionForce
-        .radius((node: any) => (node.id === me.id ? 10 : 8))
+        .radius((node: NodeObject) => (node.clientId === clientId ? 10 : 8))
         .strength(1);
     }
   }, [graphData]);
 
+  useEffect(() => {
+    if (!clientId) return;
+  
+    setGraphData((prevData) => {
+      const prevNodesMap = new Map(
+        (prevData?.nodes ?? []).map((n) => [n.clientId, n])
+      );
+  
+      const allClients = [{ clientId: clientId }, ...(clients ?? [])];
+  
+      const nodes = allClients.map((c) => {
+        const existing = prevNodesMap.get(c.clientId);
+        return existing ? { ...existing, ...c } : { ...c };
+      });
+  
+      const links =
+        clients?.map((c) => ({
+          source: clientId,
+          target: c.clientId,
+        })) ?? [];
+  
+      return { nodes, links };
+    });
+  }, [clients, clientId]);
+
   const handleNodeClick = (node: NodeObject) => {
-    if (node.id === me.id) return;
-    setSelectedNode(
-      clients.find((client) => client.clientId === node.userName),
-    );
+    if (node.clientId === clientId) return;
+
+    setSelectedNode(node as Client);
 
     if (node.activity !== undefined) {
       //cancel for this node/user
-      console.log("Clicked active transfer user ID:", node.id);
+      console.log("Clicked active transfer user ID:", node.clientId);
       return;
     }
 
-    console.log("Clicked user ID:", node.id);
+    console.log("Clicked user ID:", node.clientId);
     console.log("Clicked user ID:", node);
     fileInputRef.current?.click();
-    store.send({ type: "setupConnection", peerId: node.userName });
+    store.send({ type: "setupConnection", peerId: node.clientId });
     //set node/user to pending
-
-    // props.onClick(users.find((user) => user.id === node.id)!.userName);
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -95,7 +106,7 @@ export function UserNetwork() {
 
   const cancelTransferForNode = (node: NodeObject) => {
     if (node.activity !== undefined) {
-      console.log("Canceling transfer for user ID:", node.id);
+      console.log("Canceling transfer for user ID:", node.clientId);
       //set node/user activity to undefined
     }
   };
@@ -112,26 +123,26 @@ export function UserNetwork() {
         onChange={handleFileChange}
         multiple
       />
-      {client ? (
-        <ForceGraph2D
-          ref={graphRef}
-          graphData={graphData}
-          width={width}
-          height={height}
-          nodeVal={(node) => (node.id === me.id ? 10 : 8)}
-          onNodeClick={handleNodeClick}
-          linkColor={() => "rgba(255, 255, 255, 0.7)"}
-          linkWidth={1}
-          linkCanvasObjectMode="after"
-          enablePanInteraction={false}
-          enableZoomInteraction={false}
-          minZoom={5}
-          nodeCanvasObject={(node, ctx, globalScale) => {
-            const label = node.userName ?? "";
-            const fontSize = 12 / globalScale;
-            const [color, animal] = label.split(" ");
-            const circleColor = colorMap[color] || "#3b82f6";
-            const avatarSize = node.id === me.id ? 10 : 8;
+      <ForceGraph2D
+        ref={graphRef}
+        graphData={graphData}
+        width={width}
+        height={height}
+        nodeId="clientId"
+        nodeVal={(node) => (node.clientId === clientId ? 10 : 8)}
+        onNodeClick={handleNodeClick}
+        linkColor={() => "rgba(255, 255, 255, 0.7)"}
+        linkWidth={1}
+        linkCanvasObjectMode="after"
+        enablePanInteraction={false}
+        enableZoomInteraction={false}
+        minZoom={5}
+        nodeCanvasObject={(node, ctx, globalScale) => {
+          const label = node.clientId ?? "";
+          const fontSize = 12 / globalScale;
+          const [color, animal] = label.split(" ");
+          const circleColor = colorMap[color] || "#3b82f6";
+          const avatarSize = node.clientId === clientId ? 10 : 8;
 
             // Draw node
             ctx.beginPath();
@@ -139,21 +150,21 @@ export function UserNetwork() {
             ctx.fillStyle = circleColor;
             ctx.fill();
 
-            // Draw text
-            ctx.font = `italic ${fontSize * 0.8}px Sans-Serif`;
-            ctx.fillStyle = "#fff";
-            ctx.textAlign = "center";
-            ctx.fillText(`(${color})`, node.x!, node.y! - 2);
-            ctx.font = `bold ${fontSize}px Sans-Serif`;
-            ctx.fillText(animal, node.x!, node.y! + 1);
-            if (node.id === me.id) {
-              ctx.font = ` ${fontSize * 0.9}px Sans-Serif`;
-              ctx.fillText("You", node.x!, node.y! + 6);
-            }
+          // Draw text
+          ctx.font = `italic ${fontSize * 0.8}px Sans-Serif`;
+          ctx.fillStyle = "#fff";
+          ctx.textAlign = "center";
+          ctx.fillText(`(${color})`, node.x!, node.y! - 2);
+          ctx.font = `bold ${fontSize}px Sans-Serif`;
+          ctx.fillText(animal, node.x!, node.y! + 1);
+          if (node.clientId === clientId) {
+            ctx.font = ` ${fontSize * 0.9}px Sans-Serif`;
+            ctx.fillText("You", node.x!, node.y! + 6);
+          }
 
-            // Indicating ring + progress
-            if (node.activity !== undefined && node.id !== me.id) {
-              const ringRadius = avatarSize + 2.5;
+          // Indicating ring + progress
+          if (node.activity !== undefined && node.clientId !== clientId) {
+            const ringRadius = avatarSize + 2.5;
 
               // indicating circle
               ctx.beginPath();
@@ -163,7 +174,7 @@ export function UserNetwork() {
               ctx.lineWidth = 2 / globalScale;
               ctx.stroke();
 
-              if (node.activity === "sending" || node.activity === "reiving") {
+              if (node.activity === "sending" || node.activity === "receiving") {
                 //progress
                 const progressRadius = avatarSize + 1.5;
 
@@ -174,23 +185,22 @@ export function UserNetwork() {
                 ctx.lineWidth = 3 / globalScale;
                 ctx.stroke();
 
-                // Blue circle
-                ctx.beginPath();
-                ctx.arc(
-                  node.x!,
-                  node.y!,
-                  progressRadius,
-                  -Math.PI / 2,
-                  -Math.PI / 2 + (2 * Math.PI * node.progress) / 100,
-                );
-                ctx.strokeStyle = "#3b82f6";
-                ctx.lineWidth = 3 / globalScale;
-                ctx.stroke();
-              }
+              // Blue circle
+              ctx.beginPath();
+              ctx.arc(
+                node.x!,
+                node.y!,
+                progressRadius,
+                -Math.PI / 2,
+                -Math.PI / 2 + (2 * Math.PI * (node.progress??0)) / 100,
+              );
+              ctx.strokeStyle = "#3b82f6";
+              ctx.lineWidth = 3 / globalScale;
+              ctx.stroke();
             }
-          }}
-        />
-      ) : null}
+          }
+        }}
+      />
       <Popup
         text="Cancel process?"
         isOpen={selectedNode?.activity !== undefined}

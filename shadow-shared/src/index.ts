@@ -89,13 +89,20 @@ export const leaveResponseSchema = z
 export const clientSchema = z
   .object({
     clientId: z.string(),
-    publicKey: z.custom<JsonWebKey>(),
-    activity: z.enum(["sending", "receiving", "pending"]).optional(),
+    publicKey: z.custom<JsonWebKey>().optional(),
+    activity: z.enum(["sending", "receiving", "pending"]).default("pending").optional(),
     progress: z.number().optional(),
   })
   .strict();
 
-export const clientsSchema = z.array(clientSchema);
+export const clientsSchema = z.array(z
+  .object({
+    clientId: z.string(),
+    publicKey: z.custom<JsonWebKey>(),
+    activity: z.enum(["sending", "receiving", "pending"]).default("pending").optional(),
+    progress: z.number().optional(),
+  })
+  .strict());
 
 export const clientsResponseSchema = z
   .object({
