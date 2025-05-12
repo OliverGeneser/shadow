@@ -178,7 +178,7 @@ export function UserNetwork() {
                 ctx.beginPath();
                 ctx.arc(node.x!, node.y!, ringRadius, 0, 2 * Math.PI);
                 ctx.strokeStyle =
-                  node.activity === "sending" ? "#22c55e" : "#f97316";
+                  node.activity === "pending"? "#3b82f6": "sending" ? "#22c55e" : "#f97316";
                 ctx.lineWidth = 2 / globalScale;
                 ctx.stroke();
 
