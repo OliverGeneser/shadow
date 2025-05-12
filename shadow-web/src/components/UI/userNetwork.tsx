@@ -83,34 +83,27 @@ export function UserNetwork() {
       return;
     }
 
-    console.log("Clicked user ID:", node.clientId);
-    console.log("Clicked user ID:", node);
     fileInputRef.current?.click();
+    store.trigger.setClientActivity({clientId: node.clientId, activity: "pending"});
     store.send({ type: "setupConnection", peerId: node.clientId });
-    //set node/user to pending
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (files && files.length > 0 && selectedNode) {
-      console.log("Selected files:", files);
-      console.log("Upload files to user ID:", selectedNode.clientId);
-      // TODO: Handle file upload logic here
-
+      store.trigger.setClientActivity({clientId:selectedNode.clientId, activity: "sending"});
       store.send({
         type: "sendFile",
         file: files[0],
         peerId: selectedNode.clientId,
       });
-      //set node/user to sending
     }
   };
 
   const cancelTransferForNode = (node: Client) => {
-    if (node.activity !== undefined) {
-      console.log("Canceling transfer for user ID:", node.clientId);
-      //set node/user activity to undefined
-    }
+    store.trigger.setClientActivity({clientId: node.clientId, activity: undefined});
+    //todo cancel file transfer
+    setSelectedNode(undefined);
     setShowCancelModal(false);
   };
 
@@ -211,14 +204,13 @@ export function UserNetwork() {
         <button
           onClick={() => {
             if (selectedNode) cancelTransferForNode(selectedNode);
-            setSelectedNode(undefined);
           }}
           className="cursor-pointer rounded-xl bg-red-500 px-4 py-2 text-white transition hover:bg-red-600"
         >
           Cancel
         </button>
         <button
-          onClick={() => setSelectedNode(undefined)}
+          onClick={() => setShowCancelModal(false)}
           className="cursor-pointer rounded-xl bg-green-500 px-4 py-2 text-white transition hover:bg-green-600"
         >
           Close

@@ -6,6 +6,7 @@ import {
   Clients,
   RoomData,
   SignalOfferData,
+  activity,
 } from "shadow-shared";
 
 export interface rtcConnectionsArray {
@@ -485,6 +486,18 @@ export const store = createStore({
           ...context.chatChannelConnections,
           ...dataChannelConnecions,
         },
+      };
+    },
+    setClientActivity: (context, event: { clientId: string, activity: activity }) => {
+      const updatedClients = context.clients.map((client) =>
+        client.clientId === event.clientId
+          ? { ...client, activity: event.activity }
+          : client
+      );
+    
+      return {
+        ...context,
+        clients: updatedClients,
       };
     },
     sendFile: (context, event: { peerId: string; file: File }, enqueue) => {
