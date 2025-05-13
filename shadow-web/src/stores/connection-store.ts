@@ -101,21 +101,25 @@ const messageProcessing = async (message: Message): Promise<void> => {
   console.log(`Processed task ${message.id}: ${message.data}`);
 
   const keyPair = store.select((state) => state.keyPair).get();
+
   const clients = store.select((state) => state.clients).get();
   const client = clients.find((client) => client.clientId === message.id);
-  if (!client) throw new Error("Client is missing!");
 
   const receiveFiles = store.select((state) => state.receiveFiles).get();
-  const receiveFile = receiveFiles[message.id] ?? undefined;
+  const receiveFile = receiveFiles[message.id] ?? {
+    publicKey: client!.publicKey,
+    name: "",
+    size: 0,
+    type: "",
+  };
 
   const receiveBuffer = receiveBuffers[message.id] ?? [];
-  console.log("reeeeeeeeeee bufff", receiveBuffer);
 
   let receivedSize = receiveSizes[message.id] ?? 0;
 
   const publicKey = await window.crypto.subtle.importKey(
     "jwk",
-    client.publicKey,
+    receiveFile.publicKey,
     {
       name: "ECDH",
       namedCurve: "P-384",
@@ -141,7 +145,7 @@ const messageProcessing = async (message: Message): Promise<void> => {
 
   try {
     file = JSON.parse(new TextDecoder().decode(data));
-  } catch (_) {
+  } catch {
     file = undefined;
   }
 
@@ -155,7 +159,7 @@ const messageProcessing = async (message: Message): Promise<void> => {
         const fileChannels = store
           .select((state) => state.fileChannelConnections)
           .get();
-        fileChannels[client.clientId].close();
+        fileChannels[message.id].close();
         store.trigger.removeAwaitingApproval({
           fileId: file.fileId,
         });
@@ -169,7 +173,7 @@ const messageProcessing = async (message: Message): Promise<void> => {
     try {
       store.trigger.setReceiveFile({
         peerId: message.id,
-        file,
+        file: { ...file, publicKey: receiveFile.publicKey },
       });
       store.trigger.setSenderAwaitingApproval({
         peerId: message.id,
@@ -317,7 +321,9 @@ export const store = createStore({
     chatMessages: [] as ChatMessages,
     clients: [] as Clients,
     receiveFiles: {} as {
-      [id: string]: { name: string; size: number; type: string } | undefined;
+      [id: string]:
+        | { name: string; size: number; type: string; publicKey: JsonWebKey }
+        | undefined;
     },
     webrtcConnections: {} as WebRTCConnections,
     fileChannelConnections: {} as DataChannelConnections,
@@ -402,7 +408,9 @@ export const store = createStore({
       context,
       event: {
         peerId: string;
-        file: { name: string; size: number; type: string } | undefined;
+        file:
+          | { name: string; size: number; type: string; publicKey: JsonWebKey }
+          | undefined;
       },
     ) => ({
       ...context,
