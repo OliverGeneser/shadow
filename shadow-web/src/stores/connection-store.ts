@@ -117,28 +117,34 @@ const messageProcessing = async (message: Message): Promise<void> => {
 
   let receivedSize = receiveSizes[message.id] ?? 0;
 
-  const publicKey = await window.crypto.subtle.importKey(
-    "jwk",
-    receiveFile.publicKey,
-    {
-      name: "ECDH",
-      namedCurve: "P-384",
-    },
-    true,
-    [],
-  );
-
-  const secretKey = await deriveSecretKey(keyPair!.privateKey, publicKey);
-
   const WSData = JSON.parse(message.data);
 
-  const data = await decryptMessage(
-    secretKey,
-    new Uint8Array(WSData.initializationVector),
-    new Uint8Array(WSData.encryptedChunk),
-  );
-  if (!data) {
-    throw new Error("Failed to decrypt!!!");
+  let data;
+
+  if ("encryptedChunk" in WSData) {
+    const publicKey = await window.crypto.subtle.importKey(
+      "jwk",
+      receiveFile.publicKey,
+      {
+        name: "ECDH",
+        namedCurve: "P-384",
+      },
+      true,
+      [],
+    );
+
+    const secretKey = await deriveSecretKey(keyPair!.privateKey, publicKey);
+    data = await decryptMessage(
+      secretKey,
+      new Uint8Array(WSData.initializationVector),
+      new Uint8Array(WSData.encryptedChunk),
+    );
+
+    if (!data) {
+      throw new Error("Failed to decrypt!!!");
+    }
+  } else {
+    data = new Uint8Array(WSData.chunk);
   }
 
   const decodedData = JSON.parse(new TextDecoder().decode(data));
@@ -331,6 +337,7 @@ export const store = createStore({
     }[],
     awaitingApprovals: [] as { peerId: string; fileId: UUID }[],
     justJoined: true as boolean,
+    E2EE: false as boolean,
   },
   on: {
     setKeyPair: (context, event: { keyPair: CryptoKeyPair }) => ({
@@ -482,6 +489,12 @@ export const store = createStore({
             (s) => s.fileId !== event.fileId,
           ),
         ],
+      };
+    },
+    setE2EE: (context, event: { enabled: boolean }) => {
+      return {
+        ...context,
+        E2EE: event.enabled,
       };
     },
     acceptOrDenyFileTransfer: (
@@ -718,46 +731,65 @@ export const store = createStore({
         );
         if (!client) return context;
 
-        const publicKey = await window.crypto.subtle.importKey(
-          "jwk",
-          client.publicKey,
-          {
-            name: "ECDH",
-            namedCurve: "P-384",
-          },
-          true,
-          [],
-        );
-        const keyPair = store.select((state) => state.keyPair).get();
+        if (context.E2EE) {
+          if (dataChannel) {
+            const publicKey = await window.crypto.subtle.importKey(
+              "jwk",
+              client.publicKey,
+              {
+                name: "ECDH",
+                namedCurve: "P-384",
+              },
+              true,
+              [],
+            );
+            const keyPair = store.select((state) => state.keyPair).get();
+            const secretKey = await deriveSecretKey(
+              keyPair!.privateKey,
+              publicKey,
+            );
+            const initializationVector = window.crypto.getRandomValues(
+              new Uint8Array(8),
+            );
 
-        const secretKey = await deriveSecretKey(keyPair!.privateKey, publicKey);
+            const encryptedChunk = await encryptMessage(
+              secretKey,
+              initializationVector,
+              new TextEncoder().encode(
+                JSON.stringify({
+                  packetType: "fileMetadata",
+                  id: event.fileId,
+                  name: event.file.name,
+                  size: event.file.size,
+                  type: event.file.type,
+                }),
+              ).buffer,
+            );
+            if (!encryptedChunk) {
+              throw new Error("Failed to encrypt!!!");
+            }
 
-        if (dataChannel) {
-          const initializationVector = window.crypto.getRandomValues(
-            new Uint8Array(8),
-          );
-
-          const encryptedChunk = await encryptMessage(
-            secretKey,
-            initializationVector,
-            new TextEncoder().encode(
+            dataChannel.send(
               JSON.stringify({
-                packetType: "fileMetadata",
-                id: event.fileId,
-                name: event.file.name,
-                size: event.file.size,
-                type: event.file.type,
+                encryptedChunk: Array.from(new Uint8Array(encryptedChunk)),
+                initializationVector: Array.from(initializationVector),
               }),
-            ).buffer,
-          );
-          if (!encryptedChunk) {
-            throw new Error("Failed to encrypt!!!");
+            );
           }
+        } else {
+          const chunk = new TextEncoder().encode(
+            JSON.stringify({
+              packetType: "fileMetadata",
+              id: event.fileId,
+              name: event.file.name,
+              size: event.file.size,
+              type: event.file.type,
+            }),
+          ).buffer;
 
           dataChannel.send(
             JSON.stringify({
-              encryptedChunk: Array.from(new Uint8Array(encryptedChunk)),
-              initializationVector: Array.from(initializationVector),
+              chunk: Array.from(new Uint8Array(chunk)),
             }),
           );
         }
@@ -775,6 +807,21 @@ export const store = createStore({
             });
             await event.file.arrayBuffer().then(async (buffer) => {
               const send = async () => {
+                const publicKey = await window.crypto.subtle.importKey(
+                  "jwk",
+                  client.publicKey,
+                  {
+                    name: "ECDH",
+                    namedCurve: "P-384",
+                  },
+                  true,
+                  [],
+                );
+                const keyPair = store.select((state) => state.keyPair).get();
+                const secretKey = await deriveSecretKey(
+                  keyPair!.privateKey,
+                  publicKey,
+                );
                 while (buffer.byteLength) {
                   if (
                     dataChannel.bufferedAmount >
@@ -789,31 +836,46 @@ export const store = createStore({
                   const chunk = buffer.slice(0, maxChunkSize);
                   buffer = buffer.slice(maxChunkSize, buffer.byteLength);
 
-                  const initializationVector = window.crypto.getRandomValues(
-                    new Uint8Array(8),
-                  );
-                  const encryptedChunk = await encryptMessage(
-                    secretKey,
-                    initializationVector,
-                    new TextEncoder().encode(
+                  if (context.E2EE) {
+                    const initializationVector = window.crypto.getRandomValues(
+                      new Uint8Array(8),
+                    );
+                    const encryptedChunk = await encryptMessage(
+                      secretKey,
+                      initializationVector,
+                      new TextEncoder().encode(
+                        JSON.stringify({
+                          packetType: "chunk",
+                          data: Array.from(new Uint8Array(chunk)),
+                        }),
+                      ).buffer,
+                    );
+                    if (!encryptedChunk) {
+                      throw new Error("Failed to encrypt!!!");
+                    }
+
+                    dataChannel.send(
+                      JSON.stringify({
+                        encryptedChunk: Array.from(
+                          new Uint8Array(encryptedChunk),
+                        ),
+                        initializationVector: Array.from(initializationVector),
+                      }),
+                    );
+                  } else {
+                    const encodedChunk = new TextEncoder().encode(
                       JSON.stringify({
                         packetType: "chunk",
                         data: Array.from(new Uint8Array(chunk)),
                       }),
-                    ).buffer,
-                  );
-                  if (!encryptedChunk) {
-                    throw new Error("Failed to encrypt!!!");
-                  }
+                    ).buffer;
 
-                  dataChannel.send(
-                    JSON.stringify({
-                      encryptedChunk: Array.from(
-                        new Uint8Array(encryptedChunk),
-                      ),
-                      initializationVector: Array.from(initializationVector),
-                    }),
-                  );
+                    dataChannel.send(
+                      JSON.stringify({
+                        chunk: Array.from(new Uint8Array(encodedChunk)),
+                      }),
+                    );
+                  }
                   offset += maxChunkSize;
                   const progress = Math.floor((offset / event.file.size) * 100);
                   store.trigger.setClientProgress({
@@ -993,3 +1055,4 @@ export const useChatMessages = () =>
   useSelector(store, (state) => state.context.chatMessages);
 export const useSendersAwaitingApproval = () =>
   useSelector(store, (state) => state.context.sendersAwaitingApproval);
+export const useE2EE = () => useSelector(store, (state) => state.context.E2EE);
