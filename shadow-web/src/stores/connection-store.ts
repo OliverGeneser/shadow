@@ -122,9 +122,6 @@ const messageProcessing = async (message: Message): Promise<void> => {
   const packetType = messageArray[0];
 
   if (packetType === 1) {
-    // File metadata
-    console.log("file metadata");
-
     try {
       const publicKey = await window.crypto.subtle.importKey(
         "jwk",
@@ -145,26 +142,8 @@ const messageProcessing = async (message: Message): Promise<void> => {
 
       const data = await decryptMessage(secretKey, iv, chunkData);
 
-      if (!data) {
-        const decodedData = new TextDecoder("utf-8").decode(chunkData);
-        const parsedMetadata = JSON.parse(decodedData);
-        console.log(parsedMetadata);
-
-        store.trigger.setReceiveFile({
-          peerId: message.id,
-          file: { ...parsedMetadata, publicKey: receiveFile.publicKey },
-        });
-        store.trigger.setSenderAwaitingApproval({
-          peerId: message.id,
-          fileId: parsedMetadata.id,
-          fileName: parsedMetadata.name,
-        });
-        return;
-      }
-
       const decodedData = new TextDecoder("utf-8").decode(data);
       const parsedMetadata = JSON.parse(decodedData);
-      console.log(parsedMetadata);
 
       store.trigger.setReceiveFile({
         peerId: message.id,
@@ -248,57 +227,10 @@ const messageProcessing = async (message: Message): Promise<void> => {
           }
           receiveBuffers[message.id] = receiveBuffer;
           receiveSizes[message.id] = receivedSize;
-        } else {
-          const data = chunkData;
-
-          receiveBuffer.push(data);
-          receivedSize += data.byteLength;
-
-          const newProgress = Math.floor(
-            (receivedSize / receiveFile["size"]) * 100,
-          );
-          if (
-            newProgress - (client?.progress ?? 0) > 1 ||
-            client?.progress === 0
-          ) {
-            store.trigger.setClientActivity({
-              peerId: message.id,
-              progress: newProgress,
-            });
-          }
-
-          if (receivedSize == receiveFile["size"]) {
-            const blob = new Blob(receiveBuffer, {
-              type: receiveFile["type"],
-            });
-            const fileURL = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = fileURL;
-            a.download = receiveFile.name || "download";
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(fileURL);
-            receiveBuffers[message.id] = [];
-            receiveSizes[message.id] = 0;
-
-            store.trigger.setClientActivity({
-              peerId: message.id,
-              activity: undefined,
-              progress: undefined,
-            });
-
-            return;
-          }
-          receiveBuffers[message.id] = receiveBuffer;
-          receiveSizes[message.id] = receivedSize;
         }
       }
     }
   } else if (packetType === 3) {
-    // Accept / deny transfer
-    console.log("3");
-
     const publicKey = await window.crypto.subtle.importKey(
       "jwk",
       receiveFile.publicKey,
@@ -318,8 +250,8 @@ const messageProcessing = async (message: Message): Promise<void> => {
 
     const data = await decryptMessage(secretKey, iv, chunkData);
 
-    if (!data) {
-      const decodedData = new TextDecoder("utf-8").decode(chunkData);
+    if (data) {
+      const decodedData = new TextDecoder("utf-8").decode(data);
       const parsedMetadata = JSON.parse(decodedData);
 
       if (parsedMetadata.accepted === true) {
@@ -335,24 +267,6 @@ const messageProcessing = async (message: Message): Promise<void> => {
           fileId: parsedMetadata.fileId,
         });
       }
-      return;
-    }
-
-    const decodedData = new TextDecoder("utf-8").decode(data);
-    const parsedMetadata = JSON.parse(decodedData);
-
-    if (parsedMetadata.accepted === true) {
-      store.trigger.removeAwaitingApproval({
-        fileId: parsedMetadata.fileId,
-      });
-    } else {
-      const fileChannels = store
-        .select((state) => state.fileChannelConnections)
-        .get();
-      fileChannels[message.id].close();
-      store.trigger.removeAwaitingApproval({
-        fileId: parsedMetadata.fileId,
-      });
     }
   } else {
     console.log("Unknown packetType");
@@ -360,43 +274,49 @@ const messageProcessing = async (message: Message): Promise<void> => {
 };
 
 const chatMessageProcessing = async (message: Message): Promise<void> => {
-  //const keyPair = store.select((state) => state.keyPair).get();
+  const keyPair = store.select((state) => state.keyPair).get();
   const clients = store.select((state) => state.clients).get();
   const client = clients.find((client) => client.clientId === message.id);
-  if (!client) throw new Error("Client is missing!");
 
-  /*const publicKey = await window.crypto.subtle.importKey(
-    "jwk",
-    client.publicKey,
-    {
-      name: "ECDH",
-      namedCurve: "P-384",
-    },
-    true,
-    [],
-  );
+  if (!client) throw new Error("Missing client");
 
+  const messageArray = new Uint8Array(message.data);
 
+  const packetType = messageArray[0];
 
-  const secretKey = await deriveSecretKey(keyPair!.privateKey, publicKey);
+  if (packetType === 2) {
+    try {
+      const publicKey = await window.crypto.subtle.importKey(
+        "jwk",
+        client.publicKey,
+        {
+          name: "ECDH",
+          namedCurve: "P-384",
+        },
+        true,
+        [],
+      );
 
-  const WSData = JSON.parse(message.data);
+      const secretKey = await deriveSecretKey(keyPair!.privateKey, publicKey);
 
-  const data = await decryptMessage(
-    secretKey,
-    new Uint8Array(WSData.initializationVector),
-    new Uint8Array(WSData.encryptedMessage),
-  );
-  if (!data) {
-    throw new Error("Failed to decrypt!!!");
+      const iv = messageArray.slice(1, 9);
+
+      const chunkData = messageArray.slice(1 + iv.length);
+
+      const data = await decryptMessage(secretKey, iv, chunkData);
+
+      const decodedData = new TextDecoder("utf-8").decode(data);
+
+      store.trigger.setNewChatMessage({
+        message: decodedData,
+        peerId: message.id,
+      });
+      return;
+    } catch (e) {
+      console.log(e);
+      return;
+    }
   }
-
-  const plainText = new TextDecoder().decode(data);
-
-  store.trigger.setNewChatMessage({
-    message: plainText,
-    peerId: message.id,
-  });*/
 };
 
 class FIFOQueue<T> {
@@ -706,8 +626,6 @@ export const store = createStore({
         }
 
         const packetType = new Uint8Array([3]);
-        console.log(packetType);
-
         const encrypted = new Uint8Array(encryptedChunk);
         const data = new Uint8Array(
           packetType.length + initializationVector.length + encrypted.length,
@@ -716,10 +634,6 @@ export const store = createStore({
         data.set(packetType, 0);
         data.set(initializationVector, packetType.length);
         data.set(encrypted, packetType.length + initializationVector.length);
-
-        console.log(
-          data.slice(packetType.length + initializationVector.length),
-        );
 
         dataChannel.send(data);
       };
@@ -875,69 +789,26 @@ export const store = createStore({
         );
         if (!client) return context;
 
-        if (context.E2EE) {
-          if (dataChannel) {
-            const publicKey = await window.crypto.subtle.importKey(
-              "jwk",
-              client.publicKey,
-              {
-                name: "ECDH",
-                namedCurve: "P-384",
-              },
-              true,
-              [],
-            );
-            const keyPair = store.select((state) => state.keyPair).get();
-            const secretKey = await deriveSecretKey(
-              keyPair!.privateKey,
-              publicKey,
-            );
-            const initializationVector = window.crypto.getRandomValues(
-              new Uint8Array(8),
-            );
+        if (dataChannel) {
+          const publicKey = await window.crypto.subtle.importKey(
+            "jwk",
+            client.publicKey,
+            {
+              name: "ECDH",
+              namedCurve: "P-384",
+            },
+            true,
+            [],
+          );
+          const keyPair = store.select((state) => state.keyPair).get();
+          const secretKey = await deriveSecretKey(
+            keyPair!.privateKey,
+            publicKey,
+          );
+          const initializationVector = window.crypto.getRandomValues(
+            new Uint8Array(8),
+          );
 
-            const fileData = new TextEncoder().encode(
-              JSON.stringify({
-                id: event.fileId,
-                name: event.file.name,
-                size: event.file.size,
-                type: event.file.type,
-              }),
-            );
-
-            const encryptedChunk = await encryptMessage(
-              secretKey,
-              initializationVector,
-              fileData,
-            );
-            if (!encryptedChunk) {
-              throw new Error("Failed to encrypt!!!");
-            }
-
-            const packetType = new Uint8Array([1]);
-            console.log(packetType);
-
-            const encrypted = new Uint8Array(encryptedChunk);
-            const data = new Uint8Array(
-              packetType.length +
-                initializationVector.length +
-                encrypted.length,
-            );
-
-            data.set(packetType, 0);
-            data.set(initializationVector, packetType.length);
-            data.set(
-              encrypted,
-              packetType.length + initializationVector.length,
-            );
-
-            console.log(
-              data.slice(packetType.length + initializationVector.length),
-            );
-
-            dataChannel.send(data);
-          }
-        } else {
           const fileData = new TextEncoder().encode(
             JSON.stringify({
               id: event.fileId,
@@ -947,17 +818,28 @@ export const store = createStore({
             }),
           );
 
-          const packetType = new Uint8Array([1]);
-          console.log(packetType);
+          const encryptedChunk = await encryptMessage(
+            secretKey,
+            initializationVector,
+            fileData,
+          );
+          if (!encryptedChunk) {
+            throw new Error("Failed to encrypt!!!");
+          }
 
-          const encrypted = new Uint8Array(fileData);
-          const data = new Uint8Array(packetType.length + 8 + encrypted.length);
+          const packetType = new Uint8Array([1]);
+          const encrypted = new Uint8Array(encryptedChunk);
+          const data = new Uint8Array(
+            packetType.length + initializationVector.length + encrypted.length,
+          );
 
           data.set(packetType, 0);
-          data.set([0], packetType.length);
-          data.set(encrypted, packetType.length + 8);
+          data.set(initializationVector, packetType.length);
+          data.set(encrypted, packetType.length + initializationVector.length);
 
-          console.log(data.slice(packetType.length + 8));
+          console.log(
+            data.slice(packetType.length + initializationVector.length),
+          );
 
           dataChannel.send(data);
         }
@@ -1002,68 +884,39 @@ export const store = createStore({
 
                   const end = Math.min(offset + maxChunkSize, view.byteLength);
                   const chunk = view.subarray(offset, offset + maxChunkSize);
-
                   offset = end;
 
-                  if (context.E2EE) {
-                    const start = performance.now();
-                    const initializationVector = window.crypto.getRandomValues(
-                      new Uint8Array(8),
-                    );
-                    console.log(
-                      "intiaizliaotjng E2E :",
-                      performance.now() - start,
-                    );
-                    const encryptedChunk = await encryptMessage(
-                      secretKey,
-                      initializationVector,
-                      chunk,
-                    );
-                    if (!encryptedChunk) {
-                      throw new Error("Failed to encrypt!!!");
-                    }
-
-                    const packetType = new Uint8Array([2]);
-
-                    const encrypted = new Uint8Array(encryptedChunk);
-                    const data = new Uint8Array(
-                      packetType.length +
-                        initializationVector.length +
-                        encrypted.length,
-                    );
-
-                    data.set(packetType, 0);
-                    data.set(initializationVector, packetType.length);
-                    data.set(
-                      encrypted,
-                      packetType.length + initializationVector.length,
-                    );
-
-                    console.log(data);
-
-                    dataChannel.send(data);
-                    console.log(
-                      "Encrypting packets took:",
-                      performance.now() - start,
-                    );
-                    console.log("Send data chunk: ", encryptedChunk);
-                  } else {
-                    const packetType = new Uint8Array([2]);
-                    console.log(packetType);
-
-                    const encrypted = new Uint8Array(chunk);
-                    const data = new Uint8Array(
-                      packetType.length + 8 + encrypted.length,
-                    );
-
-                    data.set(packetType, 0);
-                    data.set([0], packetType.length);
-                    data.set(encrypted, packetType.length + 8);
-
-                    console.log(data.slice(packetType.length + 8));
-
-                    dataChannel.send(data);
+                  const initializationVector = window.crypto.getRandomValues(
+                    new Uint8Array(8),
+                  );
+                  const encryptedChunk = await encryptMessage(
+                    secretKey,
+                    initializationVector,
+                    chunk,
+                  );
+                  if (!encryptedChunk) {
+                    throw new Error("Failed to encrypt!!!");
                   }
+
+                  const packetType = new Uint8Array([2]);
+
+                  const encrypted = new Uint8Array(encryptedChunk);
+                  const data = new Uint8Array(
+                    packetType.length +
+                      initializationVector.length +
+                      encrypted.length,
+                  );
+
+                  data.set(packetType, 0);
+                  data.set(initializationVector, packetType.length);
+                  data.set(
+                    encrypted,
+                    packetType.length + initializationVector.length,
+                  );
+
+                  dataChannel.send(data);
+                  console.log("Send data chunk: ", encryptedChunk);
+
                   const newProgress = Math.floor(
                     (offset / event.file.size) * 100,
                   );
@@ -1132,21 +985,32 @@ export const store = createStore({
               new Uint8Array(8),
             );
 
-            const encryptedMessage = await encryptMessage(
+            const encryptedChunk = await encryptMessage(
               secretKey,
               initializationVector,
-              new TextEncoder().encode(event.message).buffer,
+              new TextEncoder().encode(event.message),
             );
-            if (!encryptedMessage) {
+            if (!encryptedChunk) {
               throw new Error("Failed to encrypt!!!");
             }
 
-            dataChannel.send(
-              JSON.stringify({
-                encryptedMessage: Array.from(new Uint8Array(encryptedMessage)),
-                initializationVector: Array.from(initializationVector),
-              }),
+            const packetType = new Uint8Array([2]);
+
+            const encrypted = new Uint8Array(encryptedChunk);
+            const data = new Uint8Array(
+              packetType.length +
+                initializationVector.length +
+                encrypted.length,
             );
+
+            data.set(packetType, 0);
+            data.set(initializationVector, packetType.length);
+            data.set(
+              encrypted,
+              packetType.length + initializationVector.length,
+            );
+
+            dataChannel.send(data);
           }
         });
       }
