@@ -141,19 +141,12 @@ const messageProcessing = async (message: Message): Promise<void> => {
     throw new Error("Failed to decrypt!!!");
   }
 
-  let file;
-
-  try {
-    file = JSON.parse(new TextDecoder().decode(data));
-  } catch {
-    file = undefined;
-  }
-
-  if (file?.packetType === "transferAnswer") {
+  const decodedData = JSON.parse(new TextDecoder().decode(data));
+  if (decodedData.packetType === "transferAnswer") {
     try {
-      if (file.accepted === true) {
+      if (decodedData.accepted === true) {
         store.trigger.removeAwaitingApproval({
-          fileId: file.fileId,
+          fileId: decodedData.fileId,
         });
       } else {
         const fileChannels = store
@@ -161,7 +154,7 @@ const messageProcessing = async (message: Message): Promise<void> => {
           .get();
         fileChannels[message.id].close();
         store.trigger.removeAwaitingApproval({
-          fileId: file.fileId,
+          fileId: decodedData.fileId,
         });
       }
       return;
@@ -169,23 +162,23 @@ const messageProcessing = async (message: Message): Promise<void> => {
       console.log(e);
       return;
     }
-  } else if (file?.packetType === "fileMetadata") {
+  } else if (decodedData.packetType === "fileMetadata") {
     try {
       store.trigger.setReceiveFile({
         peerId: message.id,
-        file: { ...file, publicKey: receiveFile.publicKey },
+        file: { ...decodedData, publicKey: receiveFile.publicKey },
       });
       store.trigger.setSenderAwaitingApproval({
         peerId: message.id,
-        fileId: file.id,
-        fileName: file.name,
+        fileId: decodedData.id,
+        fileName: decodedData.name,
       });
       return;
     } catch (e) {
       console.log(e);
       return;
     }
-  } else {
+  } else if (decodedData.packetType === "chunk") {
     store.trigger.setClientActivity({
       clientId: message.id,
       activity: "receiving",
@@ -195,6 +188,7 @@ const messageProcessing = async (message: Message): Promise<void> => {
       .get();
     if (!sendersAwaitingApproval.some((s) => s.peerId === message.id)) {
       if (receiveFile !== undefined) {
+        const data = new Uint8Array(decodedData.data);
         receiveBuffer.push(data);
         receivedSize += data.byteLength;
 
@@ -233,6 +227,8 @@ const messageProcessing = async (message: Message): Promise<void> => {
         receiveSizes[message.id] = receivedSize;
       }
     }
+  } else {
+    console.log("Unknown packetType");
   }
 };
 
@@ -799,7 +795,12 @@ export const store = createStore({
                   const encryptedChunk = await encryptMessage(
                     secretKey,
                     initializationVector,
-                    chunk,
+                    new TextEncoder().encode(
+                      JSON.stringify({
+                        packetType: "chunk",
+                        data: Array.from(new Uint8Array(chunk)),
+                      }),
+                    ).buffer,
                   );
                   if (!encryptedChunk) {
                     throw new Error("Failed to encrypt!!!");
