@@ -8,7 +8,6 @@ import { button } from "./components/UI/button";
 import ShareButton from "./components/UI/share";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faComments } from "@fortawesome/free-solid-svg-icons";
-import ToggleE2EButton from "./components/UI/togglee2e";
 
 function RoomView() {
   const { id } = useParams();
@@ -33,10 +32,7 @@ function RoomView() {
       <ChatPanel open={window.innerWidth > 1000} />
 
       <div className="absolute bottom-4 left-4">
-        <div className="flex gap-2">
-          <ShareButton />
-          <ToggleE2EButton />
-        </div>
+        <ShareButton />
       </div>
     </div>
   );

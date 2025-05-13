@@ -88,7 +88,7 @@ const URLSection = () => {
       className="relative mt-4 w-auto max-w-full cursor-pointer self-center rounded-md bg-gray-600 text-gray-300 transition duration-150 ease-in-out select-none hover:bg-gray-500"
       onClick={() => (!copied ? copyURLToClipboard() : null)}
     >
-      <div className="w-auto overflow-x-scroll">
+      <div className="w-auto overflow-x-hidden whitespace-nowrap">
         <p className="4xl:text-lg p-2 text-sm leading-5 break-keep">
           {window.location.href}
         </p>

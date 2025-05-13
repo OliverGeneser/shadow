@@ -380,7 +380,6 @@ export const store = createStore({
     }[],
     awaitingApprovals: [] as { peerId: string; fileId: UUID }[],
     justJoined: true as boolean,
-    E2EE: false as boolean,
   },
   on: {
     setKeyPair: (context, event: { keyPair: CryptoKeyPair }) => ({
@@ -562,12 +561,6 @@ export const store = createStore({
             (s) => s.fileId !== event.fileId,
           ),
         ],
-      };
-    },
-    setE2EE: (context, event: { enabled: boolean }) => {
-      return {
-        ...context,
-        E2EE: event.enabled,
       };
     },
     acceptOrDenyFileTransfer: (
@@ -1122,4 +1115,3 @@ export const useChatMessages = () =>
   useSelector(store, (state) => state.context.chatMessages);
 export const useSendersAwaitingApproval = () =>
   useSelector(store, (state) => state.context.sendersAwaitingApproval);
-export const useE2EE = () => useSelector(store, (state) => state.context.E2EE);
