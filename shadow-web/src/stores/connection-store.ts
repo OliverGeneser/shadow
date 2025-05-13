@@ -41,10 +41,6 @@ export const webrtcConfig: RTCConfiguration = {
   ],
 };
 
-console.log(import.meta.env.VITE_TURN_URL);
-console.log(import.meta.env.VITE_TURN_USERNAME);
-console.log(import.meta.env.VITE_TURN_PASSWORD);
-
 function deriveSecretKey(privateKey: CryptoKey, publicKey: CryptoKey) {
   return window.crypto.subtle.deriveKey(
     {
@@ -200,7 +196,7 @@ const messageProcessing = async (message: Message): Promise<void> => {
 
         store.trigger.setClientProgress({
           clientId: message.id,
-          progress: Math.floor(receivedSize/receiveFile["size"]*100),
+          progress: Math.floor((receivedSize / receiveFile["size"]) * 100),
         });
 
         if (receivedSize == receiveFile["size"]) {
@@ -332,6 +328,7 @@ export const store = createStore({
       fileName: string;
     }[],
     awaitingApprovals: [] as { peerId: string; fileId: UUID }[],
+    justJoined: true as boolean,
   },
   on: {
     setKeyPair: (context, event: { keyPair: CryptoKeyPair }) => ({
@@ -627,7 +624,7 @@ export const store = createStore({
           }
         };
 
-        if (oldClientIds.size > 0) {
+        if (context.justJoined) {
           localPeer.onnegotiationneeded = async () => {
             try {
               await localPeer.setLocalDescription(
@@ -663,6 +660,7 @@ export const store = createStore({
           ...context.chatChannelConnections,
           ...dataChannelConnecions,
         },
+        justJoined: false,
       };
     },
     setClientActivity: (
@@ -894,7 +892,7 @@ export const store = createStore({
       }
       const dataChannel = localPeer.createDataChannel("fileChannel");
       setUpFileChannel(dataChannel, event.peerId);
-      
+
       console.log("peer", localPeer);
       return {
         ...context,
