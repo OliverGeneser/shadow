@@ -960,6 +960,10 @@ const waitForFileAcceptance = async (
           subscription.unsubscribe();
           resolve();
         } else {
+          store.trigger.setClientActivity({
+            clientId: peerId,
+            activity: undefined,
+          });
           reject();
         }
       }
