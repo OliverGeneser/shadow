@@ -13,7 +13,7 @@ import Modal from "./modal";
 type link = {
   source: string;
   target: string;
-}
+};
 
 export function UserNetwork() {
   const boxRef = useRef<HTMLDivElement>(null);
@@ -68,6 +68,8 @@ export function UserNetwork() {
 
   useEffect(() => {
     if (!clientId) return;
+
+    console.log("Chganinh");
 
     setGraphData((prevData) => {
       const prevNodesMap = new Map(

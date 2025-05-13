@@ -94,11 +94,11 @@ const receiveSizes: { [id: string]: number } = {};
 
 interface Message {
   id: string;
-  data: string;
+  data: ArrayBuffer;
 }
 
 const messageProcessing = async (message: Message): Promise<void> => {
-  console.log(`Processed task ${message.id}: ${message.data}`);
+  //console.log(`Processed task ${message.id}: ${message.data}`);
 
   const keyPair = store.select((state) => state.keyPair).get();
 
@@ -117,11 +117,188 @@ const messageProcessing = async (message: Message): Promise<void> => {
 
   let receivedSize = receiveSizes[message.id] ?? 0;
 
-  const WSData = JSON.parse(message.data);
+  const messageArray = new Uint8Array(message.data);
 
-  let data;
+  const packetType = messageArray[0];
 
-  if ("encryptedChunk" in WSData) {
+  if (packetType === 1) {
+    // File metadata
+    console.log("file metadata");
+
+    try {
+      const publicKey = await window.crypto.subtle.importKey(
+        "jwk",
+        receiveFile.publicKey,
+        {
+          name: "ECDH",
+          namedCurve: "P-384",
+        },
+        true,
+        [],
+      );
+
+      const secretKey = await deriveSecretKey(keyPair!.privateKey, publicKey);
+
+      const iv = messageArray.slice(1, 9);
+
+      const chunkData = messageArray.slice(1 + iv.length);
+
+      const data = await decryptMessage(secretKey, iv, chunkData);
+
+      if (!data) {
+        const decodedData = new TextDecoder("utf-8").decode(chunkData);
+        const parsedMetadata = JSON.parse(decodedData);
+        console.log(parsedMetadata);
+
+        store.trigger.setReceiveFile({
+          peerId: message.id,
+          file: { ...parsedMetadata, publicKey: receiveFile.publicKey },
+        });
+        store.trigger.setSenderAwaitingApproval({
+          peerId: message.id,
+          fileId: parsedMetadata.id,
+          fileName: parsedMetadata.name,
+        });
+        return;
+      }
+
+      const decodedData = new TextDecoder("utf-8").decode(data);
+      const parsedMetadata = JSON.parse(decodedData);
+      console.log(parsedMetadata);
+
+      store.trigger.setReceiveFile({
+        peerId: message.id,
+        file: { ...parsedMetadata, publicKey: receiveFile.publicKey },
+      });
+      store.trigger.setSenderAwaitingApproval({
+        peerId: message.id,
+        fileId: parsedMetadata.id,
+        fileName: parsedMetadata.name,
+      });
+      return;
+    } catch (e) {
+      console.log(e);
+      return;
+    }
+  } else if (packetType === 2) {
+    const sendersAwaitingApproval = store
+      .select((state) => state.sendersAwaitingApproval)
+      .get();
+    if (!sendersAwaitingApproval.some((s) => s.peerId === message.id)) {
+      if (receiveFile !== undefined) {
+        const publicKey = await window.crypto.subtle.importKey(
+          "jwk",
+          receiveFile.publicKey,
+          {
+            name: "ECDH",
+            namedCurve: "P-384",
+          },
+          true,
+          [],
+        );
+
+        const secretKey = await deriveSecretKey(keyPair!.privateKey, publicKey);
+
+        const iv = messageArray.slice(1, 9);
+
+        const chunkData = messageArray.slice(1 + iv.length);
+
+        const data = await decryptMessage(secretKey, iv, chunkData);
+
+        if (data) {
+          receiveBuffer.push(data);
+          receivedSize += data.byteLength;
+
+          const newProgress = Math.floor(
+            (receivedSize / receiveFile["size"]) * 100,
+          );
+          if (
+            newProgress - (client?.progress ?? 0) > 1 ||
+            client?.progress === 0
+          ) {
+            store.trigger.setClientActivity({
+              peerId: message.id,
+              activity: "receiving",
+              progress: newProgress,
+            });
+          }
+
+          if (receivedSize == receiveFile["size"]) {
+            const blob = new Blob(receiveBuffer, {
+              type: receiveFile["type"],
+            });
+            const fileURL = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = fileURL;
+            a.download = receiveFile.name || "download";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(fileURL);
+            receiveBuffers[message.id] = [];
+            receiveSizes[message.id] = 0;
+
+            store.trigger.setClientActivity({
+              peerId: message.id,
+              activity: undefined,
+              progress: undefined,
+            });
+
+            return;
+          }
+          receiveBuffers[message.id] = receiveBuffer;
+          receiveSizes[message.id] = receivedSize;
+        } else {
+          const data = chunkData;
+
+          receiveBuffer.push(data);
+          receivedSize += data.byteLength;
+
+          const newProgress = Math.floor(
+            (receivedSize / receiveFile["size"]) * 100,
+          );
+          if (
+            newProgress - (client?.progress ?? 0) > 1 ||
+            client?.progress === 0
+          ) {
+            store.trigger.setClientActivity({
+              peerId: message.id,
+              progress: newProgress,
+            });
+          }
+
+          if (receivedSize == receiveFile["size"]) {
+            const blob = new Blob(receiveBuffer, {
+              type: receiveFile["type"],
+            });
+            const fileURL = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = fileURL;
+            a.download = receiveFile.name || "download";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(fileURL);
+            receiveBuffers[message.id] = [];
+            receiveSizes[message.id] = 0;
+
+            store.trigger.setClientActivity({
+              peerId: message.id,
+              activity: undefined,
+              progress: undefined,
+            });
+
+            return;
+          }
+          receiveBuffers[message.id] = receiveBuffer;
+          receiveSizes[message.id] = receivedSize;
+        }
+      }
+    }
+  } else if (packetType === 3) {
+    // Accept / deny transfer
+    console.log("3");
+
     const publicKey = await window.crypto.subtle.importKey(
       "jwk",
       receiveFile.publicKey,
@@ -134,25 +311,20 @@ const messageProcessing = async (message: Message): Promise<void> => {
     );
 
     const secretKey = await deriveSecretKey(keyPair!.privateKey, publicKey);
-    data = await decryptMessage(
-      secretKey,
-      new Uint8Array(WSData.initializationVector),
-      new Uint8Array(WSData.encryptedChunk),
-    );
+
+    const iv = messageArray.slice(1, 9);
+
+    const chunkData = messageArray.slice(1 + iv.length);
+
+    const data = await decryptMessage(secretKey, iv, chunkData);
 
     if (!data) {
-      throw new Error("Failed to decrypt!!!");
-    }
-  } else {
-    data = new Uint8Array(WSData.chunk);
-  }
+      const decodedData = new TextDecoder("utf-8").decode(chunkData);
+      const parsedMetadata = JSON.parse(decodedData);
 
-  const decodedData = JSON.parse(new TextDecoder().decode(data));
-  if (decodedData.packetType === "transferAnswer") {
-    try {
-      if (decodedData.accepted === true) {
+      if (parsedMetadata.accepted === true) {
         store.trigger.removeAwaitingApproval({
-          fileId: decodedData.fileId,
+          fileId: parsedMetadata.fileId,
         });
       } else {
         const fileChannels = store
@@ -160,72 +332,27 @@ const messageProcessing = async (message: Message): Promise<void> => {
           .get();
         fileChannels[message.id].close();
         store.trigger.removeAwaitingApproval({
-          fileId: decodedData.fileId,
+          fileId: parsedMetadata.fileId,
         });
       }
       return;
-    } catch (e) {
-      console.log(e);
-      return;
     }
-  } else if (decodedData.packetType === "fileMetadata") {
-    try {
-      store.trigger.setReceiveFile({
-        peerId: message.id,
-        file: { ...decodedData, publicKey: receiveFile.publicKey },
+
+    const decodedData = new TextDecoder("utf-8").decode(data);
+    const parsedMetadata = JSON.parse(decodedData);
+
+    if (parsedMetadata.accepted === true) {
+      store.trigger.removeAwaitingApproval({
+        fileId: parsedMetadata.fileId,
       });
-      store.trigger.setSenderAwaitingApproval({
-        peerId: message.id,
-        fileId: decodedData.id,
-        fileName: decodedData.name,
+    } else {
+      const fileChannels = store
+        .select((state) => state.fileChannelConnections)
+        .get();
+      fileChannels[message.id].close();
+      store.trigger.removeAwaitingApproval({
+        fileId: parsedMetadata.fileId,
       });
-      return;
-    } catch (e) {
-      console.log(e);
-      return;
-    }
-  } else if (decodedData.packetType === "chunk") {
-    const sendersAwaitingApproval = store
-      .select((state) => state.sendersAwaitingApproval)
-      .get();
-    if (!sendersAwaitingApproval.some((s) => s.peerId === message.id)) {
-      if (receiveFile !== undefined) {
-        const data = new Uint8Array(decodedData.data);
-        receiveBuffer.push(data);
-        receivedSize += data.byteLength;
-
-        store.trigger.setClientActivity({
-          peerId: message.id,
-          activity: "receiving",
-          progress: Math.floor((receivedSize / receiveFile["size"]) * 100),
-        });
-
-        if (receivedSize == receiveFile["size"]) {
-          const blob = new Blob(receiveBuffer, {
-            type: receiveFile["type"],
-          });
-          const fileURL = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = fileURL;
-          a.download = receiveFile.name || "download";
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(fileURL);
-          receiveBuffers[message.id] = [];
-          receiveSizes[message.id] = 0;
-
-          store.trigger.setClientActivity({
-            peerId: message.id,
-            activity: undefined,
-            progress: undefined,
-          });
-
-          return;
-        }
-        receiveBuffers[message.id] = receiveBuffer;
-        receiveSizes[message.id] = receivedSize;
-      }
     }
   } else {
     console.log("Unknown packetType");
@@ -233,12 +360,12 @@ const messageProcessing = async (message: Message): Promise<void> => {
 };
 
 const chatMessageProcessing = async (message: Message): Promise<void> => {
-  const keyPair = store.select((state) => state.keyPair).get();
+  //const keyPair = store.select((state) => state.keyPair).get();
   const clients = store.select((state) => state.clients).get();
   const client = clients.find((client) => client.clientId === message.id);
   if (!client) throw new Error("Client is missing!");
 
-  const publicKey = await window.crypto.subtle.importKey(
+  /*const publicKey = await window.crypto.subtle.importKey(
     "jwk",
     client.publicKey,
     {
@@ -248,6 +375,8 @@ const chatMessageProcessing = async (message: Message): Promise<void> => {
     true,
     [],
   );
+
+
 
   const secretKey = await deriveSecretKey(keyPair!.privateKey, publicKey);
 
@@ -267,7 +396,7 @@ const chatMessageProcessing = async (message: Message): Promise<void> => {
   store.trigger.setNewChatMessage({
     message: plainText,
     peerId: message.id,
-  });
+  });*/
 };
 
 class FIFOQueue<T> {
@@ -454,7 +583,7 @@ export const store = createStore({
       //   //   progress: undefined,
       //   // });
       // }
-      if(fileChannels[event.peerId]){
+      if (fileChannels[event.peerId]) {
         fileChannels[event.peerId].close();
       }
       // wait();
@@ -557,9 +686,7 @@ export const store = createStore({
           [],
         );
         const keyPair = store.select((state) => state.keyPair).get();
-
         const secretKey = await deriveSecretKey(keyPair!.privateKey, publicKey);
-
         const initializationVector = window.crypto.getRandomValues(
           new Uint8Array(8),
         );
@@ -569,22 +696,32 @@ export const store = createStore({
           initializationVector,
           new TextEncoder().encode(
             JSON.stringify({
-              packetType: "transferAnswer",
               fileId: event.fileId,
               accepted: event.accepted,
             }),
-          ).buffer,
+          ),
         );
         if (!encryptedChunk) {
           throw new Error("Failed to encrypt!!!");
         }
 
-        dataChannel.send(
-          JSON.stringify({
-            encryptedChunk: Array.from(new Uint8Array(encryptedChunk)),
-            initializationVector: Array.from(initializationVector),
-          }),
+        const packetType = new Uint8Array([3]);
+        console.log(packetType);
+
+        const encrypted = new Uint8Array(encryptedChunk);
+        const data = new Uint8Array(
+          packetType.length + initializationVector.length + encrypted.length,
         );
+
+        data.set(packetType, 0);
+        data.set(initializationVector, packetType.length);
+        data.set(encrypted, packetType.length + initializationVector.length);
+
+        console.log(
+          data.slice(packetType.length + initializationVector.length),
+        );
+
+        dataChannel.send(data);
       };
 
       encryptAndSend();
@@ -731,7 +868,6 @@ export const store = createStore({
       }
 
       enqueue.effect(async () => {
-        let offset = 0;
         const maxChunkSize = 14000; //16384;
 
         const client = context.clients.find(
@@ -760,48 +896,70 @@ export const store = createStore({
               new Uint8Array(8),
             );
 
+            const fileData = new TextEncoder().encode(
+              JSON.stringify({
+                id: event.fileId,
+                name: event.file.name,
+                size: event.file.size,
+                type: event.file.type,
+              }),
+            );
+
             const encryptedChunk = await encryptMessage(
               secretKey,
               initializationVector,
-              new TextEncoder().encode(
-                JSON.stringify({
-                  packetType: "fileMetadata",
-                  id: event.fileId,
-                  name: event.file.name,
-                  size: event.file.size,
-                  type: event.file.type,
-                }),
-              ).buffer,
+              fileData,
             );
             if (!encryptedChunk) {
               throw new Error("Failed to encrypt!!!");
             }
 
-            dataChannel.send(
-              JSON.stringify({
-                encryptedChunk: Array.from(new Uint8Array(encryptedChunk)),
-                initializationVector: Array.from(initializationVector),
-              }),
+            const packetType = new Uint8Array([1]);
+            console.log(packetType);
+
+            const encrypted = new Uint8Array(encryptedChunk);
+            const data = new Uint8Array(
+              packetType.length +
+                initializationVector.length +
+                encrypted.length,
             );
-            console.log("Send metadata chunk: ", encryptedChunk);
+
+            data.set(packetType, 0);
+            data.set(initializationVector, packetType.length);
+            data.set(
+              encrypted,
+              packetType.length + initializationVector.length,
+            );
+
+            console.log(
+              data.slice(packetType.length + initializationVector.length),
+            );
+
+            dataChannel.send(data);
           }
         } else {
-          const chunk = new TextEncoder().encode(
+          const fileData = new TextEncoder().encode(
             JSON.stringify({
-              packetType: "fileMetadata",
               id: event.fileId,
               name: event.file.name,
               size: event.file.size,
               type: event.file.type,
             }),
-          ).buffer;
-
-          dataChannel.send(
-            JSON.stringify({
-              chunk: Array.from(new Uint8Array(chunk)),
-            }),
           );
-          console.log("Send metadata chunk: ", chunk);
+
+          const packetType = new Uint8Array([1]);
+          console.log(packetType);
+
+          const encrypted = new Uint8Array(fileData);
+          const data = new Uint8Array(packetType.length + 8 + encrypted.length);
+
+          data.set(packetType, 0);
+          data.set([0], packetType.length);
+          data.set(encrypted, packetType.length + 8);
+
+          console.log(data.slice(packetType.length + 8));
+
+          dataChannel.send(data);
         }
 
         store.trigger.setAwaitingApprovals({
@@ -812,87 +970,115 @@ export const store = createStore({
         await waitForFileAcceptance(store, event.peerId, event.fileId)
           .then(async () => {
             await event.file.arrayBuffer().then(async (buffer) => {
+              const view = new Uint8Array(buffer);
+              let offset = 0;
+              const publicKey = await window.crypto.subtle.importKey(
+                "jwk",
+                client.publicKey,
+                {
+                  name: "ECDH",
+                  namedCurve: "P-384",
+                },
+                true,
+                [],
+              );
+              const keyPair = store.select((state) => state.keyPair).get();
+              const secretKey = await deriveSecretKey(
+                keyPair!.privateKey,
+                publicKey,
+              );
               const send = async () => {
-                const publicKey = await window.crypto.subtle.importKey(
-                  "jwk",
-                  client.publicKey,
-                  {
-                    name: "ECDH",
-                    namedCurve: "P-384",
-                  },
-                  true,
-                  [],
-                );
-                const keyPair = store.select((state) => state.keyPair).get();
-                const secretKey = await deriveSecretKey(
-                  keyPair!.privateKey,
-                  publicKey,
-                );
-                while (buffer.byteLength) {
+                while (offset < view.byteLength) {
                   if (
                     dataChannel.bufferedAmount >
                     dataChannel.bufferedAmountLowThreshold
                   ) {
-                    dataChannel.onbufferedamountlow = async () => {
+                    dataChannel.onbufferedamountlow = () => {
                       dataChannel.onbufferedamountlow = null;
-                      await send();
+                      send();
                     };
                     return;
                   }
-                  const chunk = buffer.slice(0, maxChunkSize);
-                  buffer = buffer.slice(maxChunkSize, buffer.byteLength);
+
+                  const end = Math.min(offset + maxChunkSize, view.byteLength);
+                  const chunk = view.subarray(offset, offset + maxChunkSize);
+
+                  offset = end;
 
                   if (context.E2EE) {
+                    const start = performance.now();
                     const initializationVector = window.crypto.getRandomValues(
                       new Uint8Array(8),
+                    );
+                    console.log(
+                      "intiaizliaotjng E2E :",
+                      performance.now() - start,
                     );
                     const encryptedChunk = await encryptMessage(
                       secretKey,
                       initializationVector,
-                      new TextEncoder().encode(
-                        JSON.stringify({
-                          packetType: "chunk",
-                          data: Array.from(new Uint8Array(chunk)),
-                        }),
-                      ).buffer,
+                      chunk,
                     );
                     if (!encryptedChunk) {
                       throw new Error("Failed to encrypt!!!");
                     }
 
-                    dataChannel.send(
-                      JSON.stringify({
-                        encryptedChunk: Array.from(
-                          new Uint8Array(encryptedChunk),
-                        ),
-                        initializationVector: Array.from(initializationVector),
-                      }),
+                    const packetType = new Uint8Array([2]);
+
+                    const encrypted = new Uint8Array(encryptedChunk);
+                    const data = new Uint8Array(
+                      packetType.length +
+                        initializationVector.length +
+                        encrypted.length,
+                    );
+
+                    data.set(packetType, 0);
+                    data.set(initializationVector, packetType.length);
+                    data.set(
+                      encrypted,
+                      packetType.length + initializationVector.length,
+                    );
+
+                    console.log(data);
+
+                    dataChannel.send(data);
+                    console.log(
+                      "Encrypting packets took:",
+                      performance.now() - start,
                     );
                     console.log("Send data chunk: ", encryptedChunk);
                   } else {
-                    const encodedChunk = new TextEncoder().encode(
-                      JSON.stringify({
-                        packetType: "chunk",
-                        data: Array.from(new Uint8Array(chunk)),
-                      }),
-                    ).buffer;
+                    const packetType = new Uint8Array([2]);
+                    console.log(packetType);
 
-                    dataChannel.send(
-                      JSON.stringify({
-                        chunk: Array.from(new Uint8Array(encodedChunk)),
-                      }),
+                    const encrypted = new Uint8Array(chunk);
+                    const data = new Uint8Array(
+                      packetType.length + 8 + encrypted.length,
                     );
 
-                    console.log("Send data chunk: ", encodedChunk);
+                    data.set(packetType, 0);
+                    data.set([0], packetType.length);
+                    data.set(encrypted, packetType.length + 8);
+
+                    console.log(data.slice(packetType.length + 8));
+
+                    dataChannel.send(data);
                   }
-                  offset += maxChunkSize;
-                  const progress = Math.floor((offset / event.file.size) * 100);
-                  store.trigger.setClientActivity({
-                    peerId: event.peerId,
-                    activity:"sending",
-                    progress,
-                  });
-                  if (progress >= 100) {
+                  const newProgress = Math.floor(
+                    (offset / event.file.size) * 100,
+                  );
+
+                  if (
+                    newProgress - (client?.progress ?? 0) > 1 ||
+                    client?.progress === 0
+                  ) {
+                    store.trigger.setClientActivity({
+                      peerId: event.peerId,
+                      activity: "sending",
+                      progress: newProgress,
+                    });
+                  }
+                  if (newProgress >= 100) {
                     store.trigger.setClientActivity({
                       peerId: event.peerId,
                       activity: undefined,
@@ -905,8 +1091,14 @@ export const store = createStore({
               await send();
             });
           })
-          .catch(() => console.log("File transfer was denied"));
+          .catch((e) => {
+            console.log("File transfer was denied");
+            console.log(e);
+          });
       });
+      return {
+        ...context,
+      };
     },
     sendChatMessage: (context, event: { message: string }, enqueue) => {
       for (const peerId in context.chatChannelConnections) {
@@ -1023,6 +1215,8 @@ const waitForFileAcceptance = async (
   peerId: string,
   fileId: UUID,
 ): Promise<void> => {
+  console.log("Awaiting");
+
   store.trigger.setClientActivity({
     peerId: peerId,
     activity: "pending",
