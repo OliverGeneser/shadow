@@ -3,10 +3,17 @@ import { store } from "./stores/connection-store";
 
 const serverUrl = "wss://" + import.meta.env.VITE_WEBSOCKET_URL;
 const websocket = new WebSocket(serverUrl);
+let pingInterval: NodeJS.Timeout;
 
 websocket.onopen = () => {
   console.log("WebSocket connected");
   store.send({ type: "setWebsocketConnectionStatus", state: "connected" });
+
+  pingInterval = setInterval(() => {
+    if (websocket.readyState === WebSocket.OPEN) {
+      websocket.send(JSON.stringify({ type: "ping" }));
+    }
+  }, 20000);
 };
 
 websocket.onmessage = async (event) => {
@@ -108,6 +115,9 @@ websocket.onmessage = async (event) => {
         break;
       }
 
+      case "pong":
+        break;
+
       default:
         console.error("Unknown message received:");
         console.error(msg);
@@ -119,11 +129,13 @@ websocket.onmessage = async (event) => {
 
 websocket.onclose = () => {
   console.log("WebSocket disconnected");
+  clearInterval(pingInterval);
   store.send({ type: "setWebsocketConnectionStatus", state: "disconnected" });
 };
 
 websocket.onerror = (error) => {
   console.error("WebSocket error:", error);
+  clearInterval(pingInterval);
   store.send({ type: "setWebsocketConnectionStatus", state: "disconnected" });
 };
 

@@ -52,6 +52,9 @@ const websocket: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
           case "signal-candidate":
             handleSignalCandidate(socket, parsed);
             break;
+          case "ping":
+            socket.send(JSON.stringify({ type: "pong" }));
+            break;
         }
       } catch (e) {
         if (e instanceof ZodError) {

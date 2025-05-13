@@ -44,6 +44,12 @@ const signalCandidateDataSchema = z
   })
   .strict();
 
+const pingDataSchema = z
+  .object({
+    type: z.literal("ping"),
+  })
+  .strict();
+
 export const WSRequest = z.discriminatedUnion("type", [
   roomDataSchema,
   leaveDataSchema,
@@ -51,6 +57,7 @@ export const WSRequest = z.discriminatedUnion("type", [
   signalOfferDataSchema,
   signalAnswerDataSchema,
   signalCandidateDataSchema,
+  pingDataSchema,
 ]);
 
 export type SocketData = z.infer<typeof WSRequest>;
@@ -86,7 +93,10 @@ export const leaveResponseSchema = z
   })
   .strict();
 
-export const activitySchema = z.enum(["sending", "receiving", "pending"]).default("pending").optional();
+export const activitySchema = z
+  .enum(["sending", "receiving", "pending"])
+  .default("pending")
+  .optional();
 
 export const clientSchema = z
   .object({
@@ -97,14 +107,16 @@ export const clientSchema = z
   })
   .strict();
 
-export const clientsSchema = z.array(z
-  .object({
-    clientId: z.string(),
-    publicKey: z.custom<JsonWebKey>(),
-    activity: activitySchema,
-    progress: z.number().optional(),
-  })
-  .strict());
+export const clientsSchema = z.array(
+  z
+    .object({
+      clientId: z.string(),
+      publicKey: z.custom<JsonWebKey>(),
+      activity: activitySchema,
+      progress: z.number().optional(),
+    })
+    .strict(),
+);
 
 export const clientsResponseSchema = z
   .object({
@@ -137,6 +149,12 @@ export const signalCandidateResponseSchema = z
   })
   .strict();
 
+export const pongResponseSchema = z
+  .object({
+    type: z.literal("pong"),
+  })
+  .strict();
+
 export const WSResponse = z.discriminatedUnion("type", [
   createOrJoinResponse,
   leaveResponseSchema,
@@ -144,6 +162,7 @@ export const WSResponse = z.discriminatedUnion("type", [
   signalOfferResponseSchema,
   signalAnswerResponseSchema,
   signalCandidateResponseSchema,
+  pongResponseSchema,
 ]);
 
 export type CreateOrJoinResponse = z.infer<typeof createOrJoinResponse>;
