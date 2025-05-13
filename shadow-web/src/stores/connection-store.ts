@@ -41,6 +41,10 @@ export const webrtcConfig: RTCConfiguration = {
   ],
 };
 
+console.log(import.meta.env.VITE_TURN_URL);
+console.log(import.meta.env.VITE_TURN_USERNAME);
+console.log(import.meta.env.VITE_TURN_PASSWORD);
+
 function deriveSecretKey(privateKey: CryptoKey, publicKey: CryptoKey) {
   return window.crypto.subtle.deriveKey(
     {
