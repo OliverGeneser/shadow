@@ -775,6 +775,7 @@ export const store = createStore({
                 initializationVector: Array.from(initializationVector),
               }),
             );
+            console.log("Send metadata chunk: ", encryptedChunk);
           }
         } else {
           const chunk = new TextEncoder().encode(
@@ -792,6 +793,7 @@ export const store = createStore({
               chunk: Array.from(new Uint8Array(chunk)),
             }),
           );
+          console.log("Send metadata chunk: ", chunk);
         }
 
         store.trigger.setAwaitingApprovals({
@@ -862,6 +864,7 @@ export const store = createStore({
                         initializationVector: Array.from(initializationVector),
                       }),
                     );
+                    console.log("Send data chunk: ", encryptedChunk);
                   } else {
                     const encodedChunk = new TextEncoder().encode(
                       JSON.stringify({
@@ -875,6 +878,8 @@ export const store = createStore({
                         chunk: Array.from(new Uint8Array(encodedChunk)),
                       }),
                     );
+
+                    console.log("Send data chunk: ", encodedChunk);
                   }
                   offset += maxChunkSize;
                   const progress = Math.floor((offset / event.file.size) * 100);
