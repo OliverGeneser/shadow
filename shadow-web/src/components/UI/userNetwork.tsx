@@ -128,11 +128,9 @@ export function UserNetwork() {
   };
 
   const cancelTransferForNode = (node: Client) => {
-    store.trigger.setClientActivity({
-      clientId: node.clientId,
-      activity: undefined,
+    store.trigger.cancelFileTransfer({
+      peerId: node.clientId,
     });
-    //todo cancel file transfer
     setSelectedNode(undefined);
     setShowCancelModal(false);
   };

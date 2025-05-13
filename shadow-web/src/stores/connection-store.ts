@@ -185,10 +185,6 @@ const messageProcessing = async (message: Message): Promise<void> => {
       return;
     }
   } else if (decodedData.packetType === "chunk") {
-    store.trigger.setClientActivity({
-      clientId: message.id,
-      activity: "receiving",
-    });
     const sendersAwaitingApproval = store
       .select((state) => state.sendersAwaitingApproval)
       .get();
@@ -198,8 +194,9 @@ const messageProcessing = async (message: Message): Promise<void> => {
         receiveBuffer.push(data);
         receivedSize += data.byteLength;
 
-        store.trigger.setClientProgress({
-          clientId: message.id,
+        store.trigger.setClientActivity({
+          peerId: message.id,
+          activity: "receiving",
           progress: Math.floor((receivedSize / receiveFile["size"]) * 100),
         });
 
@@ -219,11 +216,8 @@ const messageProcessing = async (message: Message): Promise<void> => {
           receiveSizes[message.id] = 0;
 
           store.trigger.setClientActivity({
-            clientId: message.id,
+            peerId: message.id,
             activity: undefined,
-          });
-          store.trigger.setClientProgress({
-            clientId: message.id,
             progress: undefined,
           });
 
@@ -443,6 +437,36 @@ export const store = createStore({
         fileChannelConnections: {
           ...updatedConnections,
         },
+      };
+    },
+    cancelFileTransfer: (context, event: { peerId: string }) => {
+      const fileChannels = store
+        .select((state) => state.fileChannelConnections)
+        .get();
+
+      // const delay = (ms:number) => new Promise(res => setTimeout(res, ms));
+      // const wait =async ()=>{
+      //   await delay(500);
+      //   console.log("slut set undefied");
+      //   // store.trigger.setClientActivity({
+      //   //   clientId: event.peerId,
+      //   //   activity: undefined,
+      //   //   progress: undefined,
+      //   // });
+      // }
+      if(fileChannels[event.peerId]){
+        fileChannels[event.peerId].close();
+      }
+      // wait();
+      const updatedClients = context.clients.map((client) =>
+        client.clientId === event.peerId
+          ? { ...client, progress: undefined, activity: undefined }
+          : client,
+      );
+
+      return {
+        ...context,
+        clients: updatedClients,
       };
     },
     setAwaitingApprovals: (
@@ -682,29 +706,13 @@ export const store = createStore({
     },
     setClientActivity: (
       context,
-      event: { clientId: string; activity: activity },
+      event: { peerId: string; activity?: activity; progress?: number },
     ) => {
       const updatedClients = context.clients.map((client) =>
-        client.clientId === event.clientId
-          ? { ...client, activity: event.activity }
+        client.clientId === event.peerId
+          ? { ...client, activity: event.activity, progress: event.progress }
           : client,
       );
-
-      return {
-        ...context,
-        clients: updatedClients,
-      };
-    },
-    setClientProgress: (
-      context,
-      event: { clientId: string; progress: number | undefined },
-    ) => {
-      const updatedClients = context.clients.map((client) =>
-        client.clientId === event.clientId
-          ? { ...client, progress: event.progress }
-          : client,
-      );
-
       return {
         ...context,
         clients: updatedClients,
@@ -803,10 +811,6 @@ export const store = createStore({
 
         await waitForFileAcceptance(store, event.peerId, event.fileId)
           .then(async () => {
-            store.trigger.setClientActivity({
-              clientId: event.peerId,
-              activity: "sending",
-            });
             await event.file.arrayBuffer().then(async (buffer) => {
               const send = async () => {
                 const publicKey = await window.crypto.subtle.importKey(
@@ -883,18 +887,16 @@ export const store = createStore({
                   }
                   offset += maxChunkSize;
                   const progress = Math.floor((offset / event.file.size) * 100);
-                  store.trigger.setClientProgress({
-                    clientId: event.peerId,
+                  store.trigger.setClientActivity({
+                    peerId: event.peerId,
+                    activity:"sending",
                     progress,
                   });
                   if (progress >= 100) {
-                    store.trigger.setClientProgress({
-                      clientId: event.peerId,
-                      progress: undefined,
-                    });
                     store.trigger.setClientActivity({
-                      clientId: event.peerId,
+                      peerId: event.peerId,
                       activity: undefined,
+                      progress: undefined,
                     });
                   }
                 }
@@ -1022,8 +1024,9 @@ const waitForFileAcceptance = async (
   fileId: UUID,
 ): Promise<void> => {
   store.trigger.setClientActivity({
-    clientId: peerId,
+    peerId: peerId,
     activity: "pending",
+    progress: undefined,
   });
   return new Promise((resolve, reject) => {
     const subscription = store.subscribe((state) => {
@@ -1036,8 +1039,9 @@ const waitForFileAcceptance = async (
           resolve();
         } else {
           store.trigger.setClientActivity({
-            clientId: peerId,
+            peerId: peerId,
             activity: undefined,
+            progress: undefined,
           });
           reject();
         }
