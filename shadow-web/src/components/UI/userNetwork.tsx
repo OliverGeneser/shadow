@@ -10,6 +10,11 @@ import {
 import { Client, colorMap } from "shadow-shared";
 import Modal from "./modal";
 
+type link = {
+  source: string;
+  target: string;
+}
+
 export function UserNetwork() {
   const boxRef = useRef<HTMLDivElement>(null);
   const graphRef = useRef<any | null>(null);
@@ -22,10 +27,7 @@ export function UserNetwork() {
   const [selectedNode, setSelectedNode] = useState<Client>();
   const [graphData, setGraphData] = useState<{
     nodes: Client[];
-    links: {
-      source: string;
-      target: string;
-    }[];
+    links: link[];
   }>();
 
   const clients = useClients();
@@ -109,22 +111,13 @@ export function UserNetwork() {
       return;
     }
 
-    //first open when connection is accepted
     fileInputRef.current?.click();
-    store.trigger.setClientActivity({
-      clientId: node.clientId,
-      activity: "pending",
-    });
     store.send({ type: "setupConnection", peerId: node.clientId });
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (files && files.length > 0 && selectedNode) {
-      store.trigger.setClientActivity({
-        clientId: selectedNode.clientId,
-        activity: "sending",
-      });
       store.send({
         type: "sendFile",
         file: files[0],

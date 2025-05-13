@@ -186,6 +186,10 @@ const messageProcessing = async (message: Message): Promise<void> => {
       return;
     }
   } else {
+    store.trigger.setClientActivity({
+      clientId: message.id,
+      activity: "receiving",
+    });
     const sendersAwaitingApproval = store
       .select((state) => state.sendersAwaitingApproval)
       .get();
@@ -193,6 +197,11 @@ const messageProcessing = async (message: Message): Promise<void> => {
       if (receiveFile !== undefined) {
         receiveBuffer.push(data);
         receivedSize += data.byteLength;
+
+        store.trigger.setClientProgress({
+          clientId: message.id,
+          progress: Math.floor(receivedSize/receiveFile["size"]*100),
+        });
 
         if (receivedSize == receiveFile["size"]) {
           const blob = new Blob(receiveBuffer, {
@@ -208,6 +217,15 @@ const messageProcessing = async (message: Message): Promise<void> => {
           URL.revokeObjectURL(fileURL);
           receiveBuffers[message.id] = [];
           receiveSizes[message.id] = 0;
+
+          store.trigger.setClientActivity({
+            clientId: message.id,
+            activity: undefined,
+          });
+          store.trigger.setClientProgress({
+            clientId: message.id,
+            progress: undefined,
+          });
 
           return;
         }
@@ -749,6 +767,10 @@ export const store = createStore({
 
         await waitForFileAcceptance(store, event.peerId, event.fileId)
           .then(async () => {
+            store.trigger.setClientActivity({
+              clientId: event.peerId,
+              activity: "sending",
+            });
             await event.file.arrayBuffer().then(async (buffer) => {
               const send = async () => {
                 while (buffer.byteLength) {
@@ -787,7 +809,7 @@ export const store = createStore({
                   );
                   offset += maxChunkSize;
                   offset += maxChunkSize;
-                  const progress = (offset / event.file.size) * 100;
+                  const progress = Math.floor((offset / event.file.size) * 100);
                   store.trigger.setClientProgress({
                     clientId: event.peerId,
                     progress,
@@ -872,7 +894,7 @@ export const store = createStore({
       }
       const dataChannel = localPeer.createDataChannel("fileChannel");
       setUpFileChannel(dataChannel, event.peerId);
-
+      
       console.log("peer", localPeer);
       return {
         ...context,
@@ -926,6 +948,10 @@ const waitForFileAcceptance = async (
   peerId: string,
   fileId: UUID,
 ): Promise<void> => {
+  store.trigger.setClientActivity({
+    clientId: peerId,
+    activity: "pending",
+  });
   return new Promise((resolve, reject) => {
     const subscription = store.subscribe((state) => {
       if (!state.context.awaitingApprovals.some((a) => a.fileId === fileId)) {
