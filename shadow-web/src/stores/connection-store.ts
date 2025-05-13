@@ -815,7 +815,6 @@ export const store = createStore({
                     }),
                   );
                   offset += maxChunkSize;
-                  offset += maxChunkSize;
                   const progress = Math.floor((offset / event.file.size) * 100);
                   store.trigger.setClientProgress({
                     clientId: event.peerId,
