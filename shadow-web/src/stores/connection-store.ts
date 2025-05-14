@@ -98,8 +98,6 @@ interface Message {
 }
 
 const messageProcessing = async (message: Message): Promise<void> => {
-  //console.log(`Processed task ${message.id}: ${message.data}`);
-
   const keyPair = store.select((state) => state.keyPair).get();
 
   const clients = store.select((state) => state.clients).get();
@@ -864,6 +862,11 @@ export const store = createStore({
               );
               const send = async () => {
                 while (offset < view.byteLength) {
+                  if (
+                    dataChannel.readyState === "closed" ||
+                    dataChannel.readyState === "closing"
+                  )
+                    return;
                   if (
                     dataChannel.bufferedAmount >
                     dataChannel.bufferedAmountLowThreshold

@@ -237,20 +237,22 @@ export function UserNetwork() {
         />
       )}
       <Modal text="Cancel process?" isOpen={showCancelModal}>
-        <button
-          onClick={() => {
-            if (selectedNode) cancelTransferForNode(selectedNode);
-          }}
-          className="cursor-pointer rounded-xl bg-red-500 px-4 py-2 text-white transition hover:bg-red-600"
-        >
-          Cancel
-        </button>
-        <button
-          onClick={() => setShowCancelModal(false)}
-          className="cursor-pointer rounded-xl bg-green-500 px-4 py-2 text-white transition hover:bg-green-600"
-        >
-          Close
-        </button>
+        <div className="mt-4 flex w-full flex-col gap-4">
+          <button
+            onClick={() => {
+              if (selectedNode) cancelTransferForNode(selectedNode);
+            }}
+            className="w-full cursor-pointer rounded-xl bg-red-500 px-4 py-2 text-white transition hover:bg-red-600"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => setShowCancelModal(false)}
+            className="w-full cursor-pointer rounded-xl bg-green-500 px-4 py-2 text-white transition hover:bg-green-600"
+          >
+            Close
+          </button>
+        </div>
       </Modal>
       {sendersAwaitingApproval.map((s) => (
         <Modal
@@ -263,7 +265,7 @@ export function UserNetwork() {
               User {s.peerId ?? ""} wants to send you the following file:{" "}
               {s.fileName}
             </div>
-            <div className="mt-4">
+            <div className="mt-4 flex flex-col gap-4">
               <button
                 onClick={() => {
                   store.trigger.acceptOrDenyFileTransfer({
