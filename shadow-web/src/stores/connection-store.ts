@@ -103,13 +103,37 @@ const messageProcessing = async (message: Message): Promise<void> => {
   const clients = store.select((state) => state.clients).get();
   const client = clients.find((client) => client.clientId === message.id);
 
-  const receiveFiles = store.select((state) => state.receiveFiles).get();
-  const receiveFile = receiveFiles[message.id] ?? {
-    publicKey: client!.publicKey,
-    name: "",
-    size: 0,
-    type: "",
-  };
+  const files = store.select((state) => state.files).get();
+  const file = files[message.id];
+  let receiveFile: CustomFile;
+  if (file) {
+    if (file.data === undefined && file.status) {
+      receiveFile = {
+        data: {
+          publicKey: client!.publicKey,
+          name: "",
+          size: 0,
+          type: "",
+        },
+        status: files[message.id].status,
+      };
+    } else {
+      receiveFile = files[message.id];
+    }
+  } else {
+    receiveFile = {
+      data: {
+        publicKey: client!.publicKey,
+        name: "",
+        size: 0,
+        type: "",
+      },
+      status: {
+        activity: "pending",
+        progress: 0,
+      },
+    };
+  }
 
   const receiveBuffer = receiveBuffers[message.id] ?? [];
 
@@ -121,51 +145,55 @@ const messageProcessing = async (message: Message): Promise<void> => {
 
   if (packetType === 1) {
     try {
-      const publicKey = await window.crypto.subtle.importKey(
-        "jwk",
-        receiveFile.publicKey,
-        {
-          name: "ECDH",
-          namedCurve: "P-384",
-        },
-        true,
-        [],
-      );
+      if (receiveFile.data) {
+        const publicKey = await window.crypto.subtle.importKey(
+          "jwk",
+          receiveFile.data.publicKey,
+          {
+            name: "ECDH",
+            namedCurve: "P-384",
+          },
+          true,
+          [],
+        );
 
-      const secretKey = await deriveSecretKey(keyPair!.privateKey, publicKey);
+        const secretKey = await deriveSecretKey(keyPair!.privateKey, publicKey);
 
-      const iv = messageArray.slice(1, 9);
+        const iv = messageArray.slice(1, 9);
 
-      const chunkData = messageArray.slice(1 + iv.length);
+        const chunkData = messageArray.slice(1 + iv.length);
 
-      const data = await decryptMessage(secretKey, iv, chunkData);
+        const data = await decryptMessage(secretKey, iv, chunkData);
 
-      const decodedData = new TextDecoder("utf-8").decode(data);
-      const parsedMetadata = JSON.parse(decodedData);
+        const decodedData = new TextDecoder("utf-8").decode(data);
+        const parsedMetadata = JSON.parse(decodedData);
 
-      store.trigger.setReceiveFile({
-        peerId: message.id,
-        file: { ...parsedMetadata, publicKey: receiveFile.publicKey },
-      });
-      store.trigger.setSenderAwaitingApproval({
-        peerId: message.id,
-        fileId: parsedMetadata.id,
-        fileName: parsedMetadata.name,
-      });
-      return;
+        store.trigger.setFile({
+          peerId: message.id,
+          status: { activity: "receiving" },
+          file: { ...parsedMetadata, publicKey: receiveFile.data.publicKey },
+        });
+        store.trigger.setSenderAwaitingApproval({
+          peerId: message.id,
+          fileId: parsedMetadata.id,
+          fileName: parsedMetadata.name,
+        });
+        return;
+      }
     } catch (e) {
       console.log(e);
       return;
     }
   } else if (packetType === 2) {
+    const start = performance.now();
     const sendersAwaitingApproval = store
       .select((state) => state.sendersAwaitingApproval)
       .get();
     if (!sendersAwaitingApproval.some((s) => s.peerId === message.id)) {
-      if (receiveFile !== undefined) {
+      if (receiveFile !== undefined && receiveFile.data) {
         const publicKey = await window.crypto.subtle.importKey(
           "jwk",
-          receiveFile.publicKey,
+          receiveFile.data.publicKey,
           {
             name: "ECDH",
             namedCurve: "P-384",
@@ -185,29 +213,30 @@ const messageProcessing = async (message: Message): Promise<void> => {
         if (data) {
           receiveBuffer.push(data);
           receivedSize += data.byteLength;
-
+          console.log("after receveive buffer:", performance.now() - start);
           const newProgress = Math.floor(
-            (receivedSize / receiveFile["size"]) * 100,
+            (receivedSize / receiveFile.data["size"]) * 100,
           );
           if (
-            newProgress - (client?.progress ?? 0) > 1 ||
-            client?.progress === 0
+            newProgress - (receiveFile.status?.progress ?? 0) > 1 ||
+            (receiveFile.status?.progress ?? 0 === 0)
           ) {
-            store.trigger.setClientActivity({
+            console.log("Settings filestatus");
+
+            store.trigger.setFileStatus({
               peerId: message.id,
-              activity: "receiving",
-              progress: newProgress,
+              status: { activity: "receiving", progress: newProgress },
             });
           }
 
-          if (receivedSize == receiveFile["size"]) {
+          if (receivedSize == receiveFile.data["size"]) {
             const blob = new Blob(receiveBuffer, {
-              type: receiveFile["type"],
+              type: receiveFile.data["type"],
             });
             const fileURL = URL.createObjectURL(blob);
             const a = document.createElement("a");
             a.href = fileURL;
-            a.download = receiveFile.name || "download";
+            a.download = receiveFile.data.name || "download";
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -215,10 +244,11 @@ const messageProcessing = async (message: Message): Promise<void> => {
             receiveBuffers[message.id] = [];
             receiveSizes[message.id] = 0;
 
-            store.trigger.setClientActivity({
+            console.log(performance.now() - start);
+            console.log("Removing file");
+
+            store.trigger.removeFile({
               peerId: message.id,
-              activity: undefined,
-              progress: undefined,
             });
 
             return;
@@ -229,41 +259,43 @@ const messageProcessing = async (message: Message): Promise<void> => {
       }
     }
   } else if (packetType === 3) {
-    const publicKey = await window.crypto.subtle.importKey(
-      "jwk",
-      receiveFile.publicKey,
-      {
-        name: "ECDH",
-        namedCurve: "P-384",
-      },
-      true,
-      [],
-    );
+    if (receiveFile.data) {
+      const publicKey = await window.crypto.subtle.importKey(
+        "jwk",
+        receiveFile.data.publicKey,
+        {
+          name: "ECDH",
+          namedCurve: "P-384",
+        },
+        true,
+        [],
+      );
 
-    const secretKey = await deriveSecretKey(keyPair!.privateKey, publicKey);
+      const secretKey = await deriveSecretKey(keyPair!.privateKey, publicKey);
 
-    const iv = messageArray.slice(1, 9);
+      const iv = messageArray.slice(1, 9);
 
-    const chunkData = messageArray.slice(1 + iv.length);
+      const chunkData = messageArray.slice(1 + iv.length);
 
-    const data = await decryptMessage(secretKey, iv, chunkData);
+      const data = await decryptMessage(secretKey, iv, chunkData);
 
-    if (data) {
-      const decodedData = new TextDecoder("utf-8").decode(data);
-      const parsedMetadata = JSON.parse(decodedData);
+      if (data) {
+        const decodedData = new TextDecoder("utf-8").decode(data);
+        const parsedMetadata = JSON.parse(decodedData);
 
-      if (parsedMetadata.accepted === true) {
-        store.trigger.removeAwaitingApproval({
-          fileId: parsedMetadata.fileId,
-        });
-      } else {
-        const fileChannels = store
-          .select((state) => state.fileChannelConnections)
-          .get();
-        fileChannels[message.id].close();
-        store.trigger.removeAwaitingApproval({
-          fileId: parsedMetadata.fileId,
-        });
+        if (parsedMetadata.accepted === true) {
+          store.trigger.removeAwaitingApproval({
+            fileId: parsedMetadata.fileId,
+          });
+        } else {
+          const fileChannels = store
+            .select((state) => state.fileChannelConnections)
+            .get();
+          fileChannels[message.id].close();
+          store.trigger.removeAwaitingApproval({
+            fileId: parsedMetadata.fileId,
+          });
+        }
       }
     }
   } else {
@@ -348,6 +380,21 @@ class FIFOQueue<T> {
   }
 }
 
+type CustomFile = {
+  data:
+    | {
+        name: string;
+        size: number;
+        type: string;
+        publicKey: JsonWebKey;
+      }
+    | undefined;
+  status: {
+    activity: "sending" | "receiving" | "pending";
+    progress: number;
+  };
+};
+
 const messageQueue = new FIFOQueue<Message>(messageProcessing);
 const chatMessageQueue = new FIFOQueue<Message>(chatMessageProcessing);
 
@@ -363,11 +410,7 @@ export const store = createStore({
     keyPair: undefined as CryptoKeyPair | undefined,
     chatMessages: [] as ChatMessages,
     clients: [] as Clients,
-    receiveFiles: {} as {
-      [id: string]:
-        | { name: string; size: number; type: string; publicKey: JsonWebKey }
-        | undefined;
-    },
+    files: {} as Record<string, CustomFile>,
     webrtcConnections: {} as WebRTCConnections,
     fileChannelConnections: {} as DataChannelConnections,
     chatChannelConnections: {} as DataChannelConnections,
@@ -447,21 +490,59 @@ export const store = createStore({
         ],
       };
     },
-    setReceiveFile: (
+    setFile: (
       context,
       event: {
         peerId: string;
         file:
           | { name: string; size: number; type: string; publicKey: JsonWebKey }
           | undefined;
+        status: { activity: "pending" | "sending" | "receiving" };
       },
     ) => ({
       ...context,
-      receiveFiles: {
-        ...context.receiveFiles,
-        [event.peerId]: event.file,
+      files: {
+        ...context.files,
+        [event.peerId]: {
+          data: event.file,
+          status: { activity: event.status.activity, progress: 0 },
+        },
       },
     }),
+    setFileStatus: (
+      context,
+      event: {
+        peerId: string;
+        status: {
+          activity: "pending" | "sending" | "receiving";
+          progress: number;
+        };
+      },
+    ) => ({
+      ...context,
+      files: {
+        ...context.files,
+        [event.peerId]: {
+          ...context.files[event.peerId],
+          status: event.status,
+        },
+      },
+    }),
+    removeFile: (
+      context,
+      event: {
+        peerId: string;
+      },
+    ) => {
+      const { [event.peerId]: _, ...updatedConnections } = context.files;
+
+      return {
+        ...context,
+        files: {
+          ...updatedConnections,
+        },
+      };
+    },
     setFileChannelConnection: (
       context,
       event: { peerId: string; dataChannel: RTCDataChannel },
@@ -773,7 +854,7 @@ export const store = createStore({
       }
 
       enqueue.effect(async () => {
-        const maxChunkSize = 14000; //16384;
+        const maxChunkSize = 16000; //;
 
         const client = context.clients.find(
           (client) => client.clientId === event.peerId,
@@ -839,6 +920,8 @@ export const store = createStore({
           peerId: event.peerId,
           fileId: event.fileId,
         });
+
+        let bytesSent = 0;
 
         await waitForFileAcceptance(store, event.peerId, event.fileId)
           .then(async () => {
@@ -913,25 +996,28 @@ export const store = createStore({
                   dataChannel.send(data);
                   console.log("Send data chunk: ", encryptedChunk);
 
+                  console.log(chunk.byteLength);
+
+                  bytesSent += chunk.byteLength;
+
+                  console.log(bytesSent);
+
                   const newProgress = Math.floor(
-                    (offset / event.file.size) * 100,
+                    (bytesSent / event.file.size) * 100,
                   );
 
-                  if (
-                    newProgress - (client?.progress ?? 0) > 1 ||
-                    client?.progress === 0
-                  ) {
-                    store.trigger.setClientActivity({
+                  const files = store.select((state) => state.files).get();
+                  const currentFile = files[event.fileId];
+
+                  if (newProgress - (currentFile?.status?.progress ?? 0) > 1) {
+                    store.trigger.setFileStatus({
                       peerId: event.peerId,
-                      activity: "sending",
-                      progress: newProgress,
+                      status: { activity: "sending", progress: newProgress },
                     });
                   }
                   if (newProgress >= 100) {
-                    store.trigger.setClientActivity({
+                    store.trigger.removeFile({
                       peerId: event.peerId,
-                      activity: undefined,
-                      progress: undefined,
                     });
                   }
                 }
@@ -1075,12 +1161,12 @@ const waitForFileAcceptance = async (
   peerId: string,
   fileId: UUID,
 ): Promise<void> => {
-  console.log("Awaiting");
-
-  store.trigger.setClientActivity({
+  store.trigger.setFileStatus({
     peerId: peerId,
-    activity: "pending",
-    progress: undefined,
+    status: {
+      activity: "pending",
+      progress: 0,
+    },
   });
   return new Promise((resolve, reject) => {
     const subscription = store.subscribe((state) => {
@@ -1090,12 +1176,14 @@ const waitForFileAcceptance = async (
           state.context.fileChannelConnections[peerId].readyState === "open"
         ) {
           subscription.unsubscribe();
+          store.trigger.setFileStatus({
+            peerId: peerId,
+            status: { activity: "sending", progress: 0 },
+          });
           resolve();
         } else {
-          store.trigger.setClientActivity({
+          store.trigger.removeFile({
             peerId: peerId,
-            activity: undefined,
-            progress: undefined,
           });
           reject();
         }
@@ -1116,5 +1204,7 @@ export const useSocketState = () =>
   useSelector(store, (state) => state.context.websocketConnectionStatus);
 export const useChatMessages = () =>
   useSelector(store, (state) => state.context.chatMessages);
+export const useFiles = () =>
+  useSelector(store, (state) => state.context.files);
 export const useSendersAwaitingApproval = () =>
   useSelector(store, (state) => state.context.sendersAwaitingApproval);

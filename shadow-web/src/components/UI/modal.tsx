@@ -1,4 +1,4 @@
-export default function Modal(props:{
+export default function Modal(props: {
   text: string;
   isOpen: boolean;
   children: React.ReactNode;
@@ -10,14 +10,10 @@ export default function Modal(props:{
       <div className="fixed inset-0 transition-opacity">
         <div className="absolute inset-0 bg-gray-500 opacity-75"></div>
       </div>
-      <div className="bg-gray-700 p-6 rounded-2xl shadow-xl w-80 z-50 text-center">
-        <p className="text-lg font-semibold mb-4 text-white">
-          {props.text}
-        </p>
-        <div className="flex justify-center gap-4">
-          {props.children}
-        </div>
+      <div className="z-50 w-[600px] rounded-2xl bg-gray-700 p-6 text-center shadow-xl">
+        <p className="mb-4 text-lg font-semibold text-white">{props.text}</p>
+        <div className="flex justify-center gap-4">{props.children}</div>
       </div>
     </div>
   );
-};
+}

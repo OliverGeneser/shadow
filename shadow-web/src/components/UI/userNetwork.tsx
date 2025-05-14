@@ -5,6 +5,7 @@ import {
   store,
   useClientId,
   useClients,
+  useFiles,
   useSendersAwaitingApproval,
 } from "../../stores/connection-store";
 import { Client, colorMap } from "shadow-shared";
@@ -20,6 +21,7 @@ export function UserNetwork() {
   const graphRef = useRef<any | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sendersAwaitingApproval = useSendersAwaitingApproval();
+  const files = useFiles();
 
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showAcceptTransfer, setShowAcceptTransfer] = useState(false);
@@ -190,24 +192,28 @@ export function UserNetwork() {
             }
 
             // Indicating ring + progress
-            if (node.activity !== undefined && node.clientId !== clientId) {
+            if (
+              Object.keys(files).includes(node.clientId) &&
+              node.clientId !== clientId
+            ) {
+              const file = files[node.clientId];
               const ringRadius = avatarSize + 2.5;
 
               // indicating circle
               ctx.beginPath();
               ctx.arc(node.x!, node.y!, ringRadius, 0, 2 * Math.PI);
               ctx.strokeStyle =
-                node.activity === "pending"
+                file.status.activity === "pending"
                   ? "#3b82f6"
-                  : node.activity === "sending"
+                  : file.status.activity === "sending"
                     ? "#22c55e"
                     : "#f97316";
               ctx.lineWidth = 2 / globalScale;
               ctx.stroke();
 
               if (
-                node.activity === "sending" ||
-                node.activity === "receiving"
+                file.status.activity === "sending" ||
+                file.status.activity === "receiving"
               ) {
                 //progress
                 const progressRadius = avatarSize + 1.5;
@@ -226,7 +232,8 @@ export function UserNetwork() {
                   node.y!,
                   progressRadius,
                   -Math.PI / 2,
-                  -Math.PI / 2 + (2 * Math.PI * (node.progress ?? 0)) / 100,
+                  -Math.PI / 2 +
+                    (2 * Math.PI * (file.status.progress ?? 0)) / 100,
                 );
                 ctx.strokeStyle = "#3b82f6";
                 ctx.lineWidth = 3 / globalScale;
