@@ -98,6 +98,7 @@ interface Message {
 }
 
 const messageProcessing = async (message: Message): Promise<void> => {
+  if (messageQueue.isLocked()) return;
   const keyPair = store.select((state) => state.keyPair).get();
 
   const clients = store.select((state) => state.clients).get();
@@ -185,7 +186,6 @@ const messageProcessing = async (message: Message): Promise<void> => {
       return;
     }
   } else if (packetType === 2) {
-    const start = performance.now();
     const sendersAwaitingApproval = store
       .select((state) => state.sendersAwaitingApproval)
       .get();
@@ -213,7 +213,6 @@ const messageProcessing = async (message: Message): Promise<void> => {
         if (data) {
           receiveBuffer.push(data);
           receivedSize += data.byteLength;
-          console.log("after receveive buffer:", performance.now() - start);
           const newProgress = Math.floor(
             (receivedSize / receiveFile.data["size"]) * 100,
           );
@@ -221,8 +220,6 @@ const messageProcessing = async (message: Message): Promise<void> => {
             newProgress - (receiveFile.status?.progress ?? 0) > 1 ||
             (receiveFile.status?.progress ?? 0 === 0)
           ) {
-            console.log("Settings filestatus");
-
             store.trigger.setFileStatus({
               peerId: message.id,
               status: { activity: "receiving", progress: newProgress },
@@ -243,9 +240,6 @@ const messageProcessing = async (message: Message): Promise<void> => {
             URL.revokeObjectURL(fileURL);
             receiveBuffers[message.id] = [];
             receiveSizes[message.id] = 0;
-
-            console.log(performance.now() - start);
-            console.log("Removing file");
 
             store.trigger.removeFile({
               peerId: message.id,
@@ -352,14 +346,30 @@ const chatMessageProcessing = async (message: Message): Promise<void> => {
 class FIFOQueue<T> {
   private queue: T[] = [];
   private isProcessing: boolean = false;
+  private locked: boolean = false;
 
   constructor(private processItem: (item: T) => Promise<void>) {}
 
   enqueue(item: T): void {
-    this.queue.push(item);
-    if (!this.isProcessing) {
-      this.processQueue();
+    if (!this.locked) {
+      this.queue.push(item);
+      if (!this.isProcessing) {
+        this.processQueue();
+      }
     }
+  }
+
+  lock(): void {
+    this.locked = true;
+  }
+
+  isLocked(): boolean {
+    return this.locked;
+  }
+
+  clear(): void {
+    this.queue = [];
+    this.locked = false;
   }
 
   private async processQueue(): Promise<void> {
@@ -583,18 +593,11 @@ export const store = createStore({
       // }
       if (fileChannels[event.peerId]) {
         fileChannels[event.peerId].close();
+        messageQueue.clear();
       }
       // wait();
-      const updatedClients = context.clients.map((client) =>
-        client.clientId === event.peerId
-          ? { ...client, progress: undefined, activity: undefined }
-          : client,
-      );
 
-      return {
-        ...context,
-        clients: updatedClients,
-      };
+      return resetFileTransfer(context, event.peerId);
     },
     setAwaitingApprovals: (
       context,
@@ -658,7 +661,7 @@ export const store = createStore({
       const dataChannel = context.fileChannelConnections[connection.peerId];
       if (!dataChannel) {
         console.log("No datachannel found");
-        return;
+        return resetFileTransfer(context, connection.peerId);
       }
 
       const encryptAndSend = async () => {
@@ -1146,13 +1149,40 @@ const setUpFileChannel = (dataChannel: RTCDataChannel, peerId: string) => {
 
   dataChannel.onopen = () => console.log("Connected to file channel peer.");
 
-  dataChannel.onclose = () =>
-    store.trigger.removeFileChannelConnection({
-      peerId: peerId,
+  dataChannel.onclose = async () => {
+    messageQueue.lock();
+    await new Promise((res) => setTimeout(res, 500));
+    receiveBuffers[peerId] = [];
+    receiveSizes[peerId] = 0;
+    store.trigger.cancelFileTransfer({
+      peerId,
     });
+  };
 
   dataChannel.onmessage = (e) => {
     messageQueue.enqueue({ id: peerId, data: e.data });
+  };
+};
+
+const resetFileTransfer = (context: any, peerId: string) => {
+  console.log(context.files[peerId]);
+  const { [peerId]: _, ...updatedConnections } = context.files;
+
+  return {
+    ...context,
+    files: {
+      ...updatedConnections,
+    },
+    awaitingApprovals: [
+      ...context.awaitingApprovals.filter(
+        (s: { peerId: string }) => s.peerId !== peerId,
+      ),
+    ],
+    sendersAwaitingApproval: [
+      ...context.sendersAwaitingApproval.filter(
+        (s: { peerId: string }) => s.peerId !== peerId,
+      ),
+    ],
   };
 };
 
@@ -1191,6 +1221,11 @@ const waitForFileAcceptance = async (
     });
   });
 };
+
+store.subscribe((state) => {
+  console.log(state.context.sendersAwaitingApproval);
+  console.log(state.context.files);
+});
 
 export const useClientId = () =>
   useSelector(store, (state) => state.context.clientId);

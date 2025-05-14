@@ -107,10 +107,8 @@ export function UserNetwork() {
 
   const handleNodeClick = (node: NodeObject) => {
     if (node.clientId === clientId) return;
-
     setSelectedNode(node as Client);
-
-    if (node.activity !== undefined) {
+    if (files[node.clientId]) {
       setShowCancelModal(true);
       return;
     }
