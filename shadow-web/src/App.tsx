@@ -29,10 +29,39 @@ function RedirectToNewRoom() {
     navigate(`/${newRoomId}`, { replace: true });
   }, [navigate]);
 
-  return null; // This component doesn't render anything
+  return null;
 }
 
 function App() {
+  useEffect(() => {
+    const handleCopy = (e: ClipboardEvent) => {
+      e.preventDefault();
+      alert("Copying is disabled");
+    };
+
+    const handleRightClick = (e: MouseEvent) => {
+      e.preventDefault();
+      alert("Right-click is disabled");
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "PrintScreen") {
+        event.preventDefault();
+        alert("Print Screen is disabled.");
+      }
+    };
+
+    document.addEventListener("copy", handleCopy);
+    document.addEventListener("contextmenu", handleRightClick);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("copy", handleCopy);
+      document.removeEventListener("contextmenu", handleRightClick);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
+
   return <RouterProvider router={router} />;
 }
 
