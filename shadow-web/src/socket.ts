@@ -23,12 +23,8 @@ websocket.onmessage = async (event) => {
 
     switch (msg.type) {
       case "ready": {
-        const message: ClientsData = {
-          type: "clients",
-        };
-        websocket.send(JSON.stringify(message));
-
         store.send({ type: "setClientId", clientId: msg.metadata.clientId });
+        store.send({ type: "setClients", clients: msg.metadata.clients });
         break;
       }
       case "clients": {

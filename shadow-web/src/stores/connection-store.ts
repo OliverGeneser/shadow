@@ -9,6 +9,12 @@ import {
   activity,
 } from "shadow-shared";
 import { UUID } from "crypto";
+import {
+  decryptMessage,
+  deriveSecretKey,
+  encryptMessage,
+} from "../utils/encryption";
+import { FIFOQueue } from "../utils/queue";
 
 export interface rtcConnectionsArray {
   clientId: string;
@@ -40,54 +46,6 @@ export const webrtcConfig: RTCConfiguration = {
     },
   ],
 };
-
-function deriveSecretKey(privateKey: CryptoKey, publicKey: CryptoKey) {
-  return window.crypto.subtle.deriveKey(
-    {
-      name: "ECDH",
-      public: publicKey,
-    },
-    privateKey,
-    {
-      name: "AES-GCM",
-      length: 256,
-    },
-    false,
-    ["encrypt", "decrypt"],
-  );
-}
-
-async function encryptMessage(
-  key: CryptoKey,
-  initializationVector: Uint8Array,
-  message: ArrayBuffer,
-) {
-  try {
-    return await window.crypto.subtle.encrypt(
-      { name: "AES-GCM", iv: initializationVector },
-      key,
-      message,
-    );
-  } catch (e) {
-    console.log(e);
-  }
-}
-
-async function decryptMessage(
-  key: CryptoKey,
-  initializationVector: Uint8Array,
-  ciphertext: Uint8Array,
-) {
-  try {
-    return await window.crypto.subtle.decrypt(
-      { name: "AES-GCM", iv: initializationVector },
-      key,
-      ciphertext,
-    );
-  } catch (e) {
-    console.log(e);
-  }
-}
 
 const receiveBuffers: { [id: string]: ArrayBuffer[] } = {};
 const receiveSizes: { [id: string]: number } = {};
@@ -342,53 +300,6 @@ const chatMessageProcessing = async (message: Message): Promise<void> => {
     }
   }
 };
-
-class FIFOQueue<T> {
-  private queue: T[] = [];
-  private isProcessing: boolean = false;
-  private locked: boolean = false;
-
-  constructor(private processItem: (item: T) => Promise<void>) {}
-
-  enqueue(item: T): void {
-    if (!this.locked) {
-      this.queue.push(item);
-      if (!this.isProcessing) {
-        this.processQueue();
-      }
-    }
-  }
-
-  lock(): void {
-    this.locked = true;
-  }
-
-  isLocked(): boolean {
-    return this.locked;
-  }
-
-  clear(): void {
-    this.queue = [];
-    this.locked = false;
-  }
-
-  private async processQueue(): Promise<void> {
-    this.isProcessing = true;
-
-    while (this.queue.length > 0) {
-      const item = this.queue.shift();
-      if (item) {
-        try {
-          await this.processItem(item);
-        } catch (error) {
-          console.error("Error processing item:", error);
-        }
-      }
-    }
-
-    this.isProcessing = false;
-  }
-}
 
 type CustomFile = {
   data:
