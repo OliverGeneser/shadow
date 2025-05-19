@@ -857,6 +857,8 @@ export const store = createStore({
                 keyPair!.privateKey,
                 publicKey,
               );
+              const files = store.select((state) => state.files).get();
+              const currentFile = files[event.fileId];
               const send = async () => {
                 while (offset < view.byteLength) {
                   if (
@@ -919,9 +921,6 @@ export const store = createStore({
                   const newProgress = Math.floor(
                     (bytesSent / event.file.size) * 100,
                   );
-
-                  const files = store.select((state) => state.files).get();
-                  const currentFile = files[event.fileId];
 
                   if (newProgress - (currentFile?.status?.progress ?? 0) > 1) {
                     store.trigger.setFileStatus({
