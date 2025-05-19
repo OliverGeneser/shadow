@@ -1084,12 +1084,17 @@ const setUpFileChannel = (dataChannel: RTCDataChannel, peerId: string) => {
 
 const resetFileTransfer = (context: any, peerId: string) => {
   console.log(context.files[peerId]);
-  const { [peerId]: _, ...updatedConnections } = context.files;
+  const { [peerId]: _, ...updatedFiles } = context.files;
+  const { [peerId]: __, ...updatedFileConnections } =
+    context.fileChannelConnections;
 
   return {
     ...context,
+    fileChannelConnections: {
+      ...updatedFileConnections,
+    },
     files: {
-      ...updatedConnections,
+      ...updatedFiles,
     },
     awaitingApprovals: [
       ...context.awaitingApprovals.filter(
