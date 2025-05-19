@@ -7,7 +7,7 @@ let pingInterval: NodeJS.Timeout;
 
 websocket.onopen = () => {
   console.log("WebSocket connected");
-  store.send({ type: "setWebsocketConnectionStatus", state: "connected" });
+  store.send({ type: "setWebSocketConnectionStatus", state: "connected" });
 
   pingInterval = setInterval(() => {
     if (websocket.readyState === WebSocket.OPEN) {
@@ -126,13 +126,13 @@ websocket.onmessage = async (event) => {
 websocket.onclose = () => {
   console.log("WebSocket disconnected");
   clearInterval(pingInterval);
-  store.send({ type: "setWebsocketConnectionStatus", state: "disconnected" });
+  store.send({ type: "setWebSocketConnectionStatus", state: "disconnected" });
 };
 
 websocket.onerror = (error) => {
   console.error("WebSocket error:", error);
   clearInterval(pingInterval);
-  store.send({ type: "setWebsocketConnectionStatus", state: "disconnected" });
+  store.send({ type: "setWebSocketConnectionStatus", state: "disconnected" });
 };
 
 export default websocket;

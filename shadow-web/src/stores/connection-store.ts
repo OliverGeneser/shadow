@@ -6,7 +6,6 @@ import {
   Clients,
   RoomData,
   SignalOfferData,
-  activity,
 } from "shadow-shared";
 import { UUID } from "crypto";
 import {
@@ -319,6 +318,14 @@ type CustomFile = {
 const messageQueue = new FIFOQueue(messageProcessing);
 const chatMessageQueue = new FIFOQueue(chatMessageProcessing);
 
+type SendersApproval = {
+  peerId: string;
+  fileId: UUID;
+  fileName: string;
+};
+
+type Approval = { peerId: string; fileId: UUID };
+
 export const store = createStore({
   context: {
     websocketConnectionStatus: "init" as
@@ -335,12 +342,8 @@ export const store = createStore({
     webrtcConnections: {} as WebRTCConnections,
     fileChannelConnections: {} as DataChannelConnections,
     chatChannelConnections: {} as DataChannelConnections,
-    sendersAwaitingApproval: [] as {
-      peerId: string;
-      fileId: UUID;
-      fileName: string;
-    }[],
-    awaitingApprovals: [] as { peerId: string; fileId: UUID }[],
+    sendersAwaitingApproval: [] as SendersApproval[],
+    awaitingApprovals: [] as Approval[],
     justJoined: true as boolean,
   },
   on: {
@@ -348,7 +351,7 @@ export const store = createStore({
       ...context,
       keyPair: event.keyPair,
     }),
-    setWebsocketConnectionStatus: (
+    setWebSocketConnectionStatus: (
       context,
       event: { state: "init" | "connecting" | "connected" | "disconnected" },
     ) => ({
@@ -492,21 +495,10 @@ export const store = createStore({
         .select((state) => state.fileChannelConnections)
         .get();
 
-      // const delay = (ms:number) => new Promise(res => setTimeout(res, ms));
-      // const wait =async ()=>{
-      //   await delay(500);
-      //   console.log("slut set undefied");
-      //   // store.trigger.setClientActivity({
-      //   //   clientId: event.peerId,
-      //   //   activity: undefined,
-      //   //   progress: undefined,
-      //   // });
-      // }
       if (fileChannels[event.peerId]) {
         fileChannels[event.peerId].close();
         messageQueue.clear(event.peerId);
       }
-      // wait();
 
       return resetFileTransfer(context, event.peerId);
     },
@@ -689,14 +681,14 @@ export const store = createStore({
           const dataChannel = e.channel;
           switch (dataChannel.label) {
             case "chatChannel":
-              setUpDataChannel(dataChannel, client.clientId);
+              setupDataChannel(dataChannel, client.clientId);
               store.trigger.setChatChannelConnection({
                 peerId: client.clientId,
                 dataChannel: dataChannel,
               });
               break;
             case "fileChannel":
-              setUpFileChannel(dataChannel, client.clientId);
+              setupFileChannel(dataChannel, client.clientId);
               store.trigger.setFileChannelConnection({
                 peerId: client.clientId,
                 dataChannel: dataChannel,
@@ -725,7 +717,7 @@ export const store = createStore({
           };
 
           const dataChannel = localPeer.createDataChannel("chatChannel");
-          setUpDataChannel(dataChannel, client.clientId);
+          setupDataChannel(dataChannel, client.clientId);
           dataChannelConnecions[client.clientId] = dataChannel;
         }
 
@@ -741,20 +733,6 @@ export const store = createStore({
           ...dataChannelConnecions,
         },
         justJoined: false,
-      };
-    },
-    setClientActivity: (
-      context,
-      event: { peerId: string; activity?: activity; progress?: number },
-    ) => {
-      const updatedClients = context.clients.map((client) =>
-        client.clientId === event.peerId
-          ? { ...client, activity: event.activity, progress: event.progress }
-          : client,
-      );
-      return {
-        ...context,
-        clients: updatedClients,
       };
     },
     sendFile: (
@@ -776,7 +754,6 @@ export const store = createStore({
           (client) => client.clientId === event.peerId,
         );
         if (!client) return context;
-
         if (dataChannel) {
           const publicKey = await window.crypto.subtle.importKey(
             "jwk",
@@ -832,123 +809,115 @@ export const store = createStore({
           if (dataChannel.readyState === "open") {
             dataChannel.send(data);
           }
-        }
 
-        store.trigger.setAwaitingApprovals({
-          peerId: event.peerId,
-          fileId: event.fileId,
-        });
-
-        let bytesSent = 0;
-
-        await waitForFileAcceptance(store, event.peerId, event.fileId)
-          .then(async () => {
-            await event.file.arrayBuffer().then(async (buffer) => {
-              const view = new Uint8Array(buffer);
-              let offset = 0;
-              const publicKey = await window.crypto.subtle.importKey(
-                "jwk",
-                client.publicKey,
-                {
-                  name: "ECDH",
-                  namedCurve: "P-384",
-                },
-                true,
-                [],
-              );
-              const keyPair = store.select((state) => state.keyPair).get();
-              const secretKey = await deriveSecretKey(
-                keyPair!.privateKey,
-                publicKey,
-              );
-              const files = store.select((state) => state.files).get();
-              const currentFile = files[event.fileId];
-              const send = async () => {
-                while (offset < view.byteLength) {
-                  if (
-                    dataChannel.readyState === "closed" ||
-                    dataChannel.readyState === "closing"
-                  )
-                    return;
-                  if (
-                    dataChannel.bufferedAmount >
-                    dataChannel.bufferedAmountLowThreshold
-                  ) {
-                    dataChannel.onbufferedamountlow = () => {
-                      dataChannel.onbufferedamountlow = null;
-                      send();
-                    };
-                    return;
-                  }
-
-                  const end = Math.min(offset + maxChunkSize, view.byteLength);
-                  const chunk = view.subarray(offset, offset + maxChunkSize);
-                  offset = end;
-
-                  const initializationVector = window.crypto.getRandomValues(
-                    new Uint8Array(8),
-                  );
-                  const encryptedChunk = await encryptMessage(
-                    secretKey,
-                    initializationVector,
-                    chunk,
-                  );
-                  if (!encryptedChunk) {
-                    throw new Error("Failed to encrypt!!!");
-                  }
-
-                  const packetType = new Uint8Array([2]);
-
-                  const encrypted = new Uint8Array(encryptedChunk);
-                  const data = new Uint8Array(
-                    packetType.length +
-                      initializationVector.length +
-                      encrypted.length,
-                  );
-
-                  data.set(packetType, 0);
-                  data.set(initializationVector, packetType.length);
-                  data.set(
-                    encrypted,
-                    packetType.length + initializationVector.length,
-                  );
-
-                  if (dataChannel.readyState === "open") {
-                    dataChannel.send(data);
-                  }
-                  console.log("Send data chunk: ", encryptedChunk);
-
-                  console.log(chunk.byteLength);
-
-                  bytesSent += chunk.byteLength;
-
-                  console.log(bytesSent);
-
-                  const newProgress = Math.floor(
-                    (bytesSent / event.file.size) * 100,
-                  );
-
-                  if (newProgress - (currentFile?.status?.progress ?? 0) > 1) {
-                    store.trigger.setFileStatus({
-                      peerId: event.peerId,
-                      status: { activity: "sending", progress: newProgress },
-                    });
-                  }
-                  if (newProgress >= 100) {
-                    store.trigger.removeFile({
-                      peerId: event.peerId,
-                    });
-                  }
-                }
-              };
-
-              await send();
-            });
-          })
-          .catch((e) => {
-            console.log("File transfer was denied");
-            console.log(e);
+          store.trigger.setAwaitingApprovals({
+            peerId: event.peerId,
+            fileId: event.fileId,
           });
+
+          let bytesSent = 0;
+
+          await waitForFileAcceptance(store, event.peerId, event.fileId)
+            .then(async () => {
+              await event.file.arrayBuffer().then(async (buffer) => {
+                const view = new Uint8Array(buffer);
+                let offset = 0;
+                const files = store.select((state) => state.files).get();
+                const currentFile = files[event.fileId];
+
+                const send = async () => {
+                  while (offset < view.byteLength) {
+                    if (
+                      dataChannel.readyState === "closed" ||
+                      dataChannel.readyState === "closing"
+                    )
+                      return;
+                    if (
+                      dataChannel.bufferedAmount >
+                      dataChannel.bufferedAmountLowThreshold
+                    ) {
+                      dataChannel.onbufferedamountlow = () => {
+                        dataChannel.onbufferedamountlow = null;
+                        send();
+                      };
+                      return;
+                    }
+
+                    const end = Math.min(
+                      offset + maxChunkSize,
+                      view.byteLength,
+                    );
+                    const chunk = view.subarray(offset, offset + maxChunkSize);
+                    offset = end;
+
+                    const initializationVector = window.crypto.getRandomValues(
+                      new Uint8Array(8),
+                    );
+                    const encryptedChunk = await encryptMessage(
+                      secretKey,
+                      initializationVector,
+                      chunk,
+                    );
+                    if (!encryptedChunk) {
+                      throw new Error("Failed to encrypt!!!");
+                    }
+
+                    const packetType = new Uint8Array([2]);
+
+                    const encrypted = new Uint8Array(encryptedChunk);
+                    const data = new Uint8Array(
+                      packetType.length +
+                        initializationVector.length +
+                        encrypted.length,
+                    );
+
+                    data.set(packetType, 0);
+                    data.set(initializationVector, packetType.length);
+                    data.set(
+                      encrypted,
+                      packetType.length + initializationVector.length,
+                    );
+
+                    if (dataChannel.readyState === "open") {
+                      dataChannel.send(data);
+                    }
+                    console.log("Send data chunk: ", encryptedChunk);
+
+                    console.log(chunk.byteLength);
+
+                    bytesSent += chunk.byteLength;
+
+                    console.log(bytesSent);
+
+                    const newProgress = Math.floor(
+                      (bytesSent / event.file.size) * 100,
+                    );
+
+                    if (
+                      newProgress - (currentFile?.status?.progress ?? 0) >
+                      1
+                    ) {
+                      store.trigger.setFileStatus({
+                        peerId: event.peerId,
+                        status: { activity: "sending", progress: newProgress },
+                      });
+                    }
+                    if (newProgress >= 100) {
+                      store.trigger.removeFile({
+                        peerId: event.peerId,
+                      });
+                    }
+                  }
+                };
+
+                await send();
+              });
+            })
+            .catch((e) => {
+              console.log("File transfer was denied");
+              console.log(e);
+            });
+        }
       });
       return {
         ...context,
@@ -1027,7 +996,7 @@ export const store = createStore({
         return context;
       }
       const dataChannel = localPeer.createDataChannel("fileChannel");
-      setUpFileChannel(dataChannel, event.peerId);
+      setupFileChannel(dataChannel, event.peerId);
 
       console.log("peer", localPeer);
       return {
@@ -1043,7 +1012,7 @@ export const store = createStore({
 
 type StoreType = typeof store;
 
-const setUpDataChannel = (dataChannel: RTCDataChannel, peerId: string) => {
+const setupDataChannel = (dataChannel: RTCDataChannel, peerId: string) => {
   dataChannel.binaryType = "arraybuffer";
   dataChannel.bufferedAmountLowThreshold = 0;
 
@@ -1061,7 +1030,7 @@ const setUpDataChannel = (dataChannel: RTCDataChannel, peerId: string) => {
   };
 };
 
-const setUpFileChannel = (dataChannel: RTCDataChannel, peerId: string) => {
+const setupFileChannel = (dataChannel: RTCDataChannel, peerId: string) => {
   dataChannel.binaryType = "arraybuffer";
   dataChannel.bufferedAmountLowThreshold = 0;
 
@@ -1145,21 +1114,12 @@ const waitForFileAcceptance = async (
   });
 };
 
-store.subscribe((state) => {
-  console.log(state.context.sendersAwaitingApproval);
-  console.log(state.context.files);
-});
-
 export const useClientId = () =>
   useSelector(store, (state) => state.context.clientId);
-export const useKeyPair = () =>
-  useSelector(store, (state) => state.context.keyPair);
 export const useRoomId = () =>
   useSelector(store, (state) => state.context.roomId);
 export const useClients = () =>
   useSelector(store, (state) => state.context.clients);
-export const useSocketState = () =>
-  useSelector(store, (state) => state.context.websocketConnectionStatus);
 export const useChatMessages = () =>
   useSelector(store, (state) => state.context.chatMessages);
 export const useFiles = () =>
