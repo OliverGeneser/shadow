@@ -50,13 +50,13 @@ export const webrtcConfig: RTCConfiguration = {
 const receiveBuffers: { [id: string]: ArrayBuffer[] } = {};
 const receiveSizes: { [id: string]: number } = {};
 
-interface Message {
+export interface Message {
   id: string;
   data: ArrayBuffer;
 }
 
 const messageProcessing = async (message: Message): Promise<void> => {
-  if (messageQueue.isLocked()) return;
+  if (messageQueue.isLocked(message.id)) return;
   const keyPair = store.select((state) => state.keyPair).get();
 
   const clients = store.select((state) => state.clients).get();
@@ -316,8 +316,8 @@ type CustomFile = {
   };
 };
 
-const messageQueue = new FIFOQueue<Message>(messageProcessing);
-const chatMessageQueue = new FIFOQueue<Message>(chatMessageProcessing);
+const messageQueue = new FIFOQueue(messageProcessing);
+const chatMessageQueue = new FIFOQueue(chatMessageProcessing);
 
 export const store = createStore({
   context: {
@@ -504,7 +504,7 @@ export const store = createStore({
       // }
       if (fileChannels[event.peerId]) {
         fileChannels[event.peerId].close();
-        messageQueue.clear();
+        messageQueue.clear(event.peerId);
       }
       // wait();
 
@@ -621,7 +621,9 @@ export const store = createStore({
         data.set(initializationVector, packetType.length);
         data.set(encrypted, packetType.length + initializationVector.length);
 
-        dataChannel.send(data);
+        if (dataChannel.readyState === "open") {
+          dataChannel.send(data);
+        }
       };
 
       encryptAndSend();
@@ -827,7 +829,9 @@ export const store = createStore({
             data.slice(packetType.length + initializationVector.length),
           );
 
-          dataChannel.send(data);
+          if (dataChannel.readyState === "open") {
+            dataChannel.send(data);
+          }
         }
 
         store.trigger.setAwaitingApprovals({
@@ -909,7 +913,9 @@ export const store = createStore({
                     packetType.length + initializationVector.length,
                   );
 
-                  dataChannel.send(data);
+                  if (dataChannel.readyState === "open") {
+                    dataChannel.send(data);
+                  }
                   console.log("Send data chunk: ", encryptedChunk);
 
                   console.log(chunk.byteLength);
@@ -1005,7 +1011,9 @@ export const store = createStore({
               packetType.length + initializationVector.length,
             );
 
-            dataChannel.send(data);
+            if (dataChannel.readyState === "open") {
+              dataChannel.send(data);
+            }
           }
         });
       }
@@ -1060,7 +1068,7 @@ const setUpFileChannel = (dataChannel: RTCDataChannel, peerId: string) => {
   dataChannel.onopen = () => console.log("Connected to file channel peer.");
 
   dataChannel.onclose = async () => {
-    messageQueue.lock();
+    messageQueue.lock(peerId);
     await new Promise((res) => setTimeout(res, 500));
     receiveBuffers[peerId] = [];
     receiveSizes[peerId] = 0;

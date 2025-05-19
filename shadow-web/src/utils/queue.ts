@@ -1,12 +1,14 @@
-export class FIFOQueue<T> {
-  private queue: T[] = [];
+import { Message } from "../stores/connection-store";
+
+export class FIFOQueue {
+  private queue: Message[] = [];
   private isProcessing: boolean = false;
-  private locked: boolean = false;
+  private locked: string[] = [];
 
-  constructor(private processItem: (item: T) => Promise<void>) {}
+  constructor(private processItem: (item: Message) => Promise<void>) {}
 
-  enqueue(item: T): void {
-    if (!this.locked) {
+  enqueue(item: Message): void {
+    if (!this.isLocked(item.id)) {
       this.queue.push(item);
       if (!this.isProcessing) {
         this.processQueue();
@@ -14,17 +16,21 @@ export class FIFOQueue<T> {
     }
   }
 
-  lock(): void {
-    this.locked = true;
+  lock(id: string): void {
+    this.locked.push(id);
   }
 
-  isLocked(): boolean {
-    return this.locked;
+  unlock(id: string): void {
+    this.locked = this.locked.filter((l) => l !== id);
   }
 
-  clear(): void {
-    this.queue = [];
-    this.locked = false;
+  isLocked(id: string): boolean {
+    return this.locked.some((l) => l === id);
+  }
+
+  clear(id: string): void {
+    this.queue = this.queue.filter((q) => q.id !== id);
+    this.unlock(id);
   }
 
   private async processQueue(): Promise<void> {
