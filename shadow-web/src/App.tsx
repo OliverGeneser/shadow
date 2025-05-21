@@ -6,17 +6,17 @@ import {
   RouterProvider,
   useNavigate,
 } from "react-router-dom";
-import Room from "./room";
+import RoomView from "./components/view/room-view";
 import { useEffect } from "react";
 import { v4 as uuidv4 } from "uuid";
 import "./socket";
-import "./stores/connection-store";
+import "./store";
 
 const router = createBrowserRouter(
   createRoutesFromElements(
     <Route>
       <Route index element={<RedirectToNewRoom />} />
-      <Route path="/:id" element={<Room />} />
+      <Route path="/:id" element={<RoomView />} />
     </Route>,
   ),
 );
@@ -33,24 +33,24 @@ function RedirectToNewRoom() {
 }
 
 function App() {
+  const handleCopy = (e: ClipboardEvent) => {
+    e.preventDefault();
+    alert("Copying is disabled");
+  };
+
+  const handleRightClick = (e: MouseEvent) => {
+    e.preventDefault();
+    alert("Right-click is disabled");
+  };
+
+  const handleKeyDown = (event: KeyboardEvent) => {
+    if (event.key === "PrintScreen") {
+      event.preventDefault();
+      alert("Print Screen is disabled.");
+    }
+  };
+
   useEffect(() => {
-    const handleCopy = (e: ClipboardEvent) => {
-      e.preventDefault();
-      alert("Copying is disabled");
-    };
-
-    const handleRightClick = (e: MouseEvent) => {
-      e.preventDefault();
-      alert("Right-click is disabled");
-    };
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "PrintScreen") {
-        event.preventDefault();
-        alert("Print Screen is disabled.");
-      }
-    };
-
     document.addEventListener("copy", handleCopy);
     document.addEventListener("contextmenu", handleRightClick);
     document.addEventListener("keydown", handleKeyDown);

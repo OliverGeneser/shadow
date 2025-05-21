@@ -1,6 +1,6 @@
 import { createStore } from "@xstate/store";
 import { useSelector } from "@xstate/store/react";
-import { sendMessageWithRetry } from "../socket";
+import { sendMessageWithRetry } from "./socket";
 import {
   SignalCandidateData,
   Clients,
@@ -12,8 +12,8 @@ import {
   decryptMessage,
   deriveSecretKey,
   encryptMessage,
-} from "../utils/encryption";
-import { FIFOQueue } from "../utils/queue";
+} from "./utils/encryption";
+import { FIFOQueue } from "./utils/queue";
 
 export interface rtcConnectionsArray {
   clientId: string;
@@ -36,7 +36,7 @@ export enum ReadyState {
   CLOSING = 2,
   CLOSED = 3,
 }
-export const webrtcConfig: RTCConfiguration = {
+export const webRTCConfig: RTCConfiguration = {
   iceServers: [
     {
       urls: import.meta.env.VITE_TURN_URL,
@@ -328,7 +328,7 @@ type Approval = { peerId: string; fileId: UUID };
 
 export const store = createStore({
   context: {
-    websocketConnectionStatus: "init" as
+    webSocketConnectionStatus: "init" as
       | "init"
       | "connecting"
       | "connected"
@@ -339,7 +339,7 @@ export const store = createStore({
     chatMessages: [] as ChatMessages,
     clients: [] as Clients,
     files: {} as Record<string, CustomFile>,
-    webrtcConnections: {} as WebRTCConnections,
+    webRTCConnections: {} as WebRTCConnections,
     fileChannelConnections: {} as DataChannelConnections,
     chatChannelConnections: {} as DataChannelConnections,
     sendersAwaitingApproval: [] as SendersApproval[],
@@ -396,8 +396,8 @@ export const store = createStore({
       event: { peerId: string; connection: RTCPeerConnection },
     ) => ({
       ...context,
-      webrtcConnections: {
-        ...context.webrtcConnections,
+      webRTCConnections: {
+        ...context.webRTCConnections,
         [event.peerId]: event.connection,
       },
     }),
@@ -664,7 +664,7 @@ export const store = createStore({
       const dataChannelConnecions: DataChannelConnections = {};
 
       diffClients.forEach((client) => {
-        const localPeer = new RTCPeerConnection(webrtcConfig);
+        const localPeer = new RTCPeerConnection(webRTCConfig);
 
         localPeer.onicecandidate = async ({ candidate }) => {
           if (candidate) {
@@ -727,7 +727,7 @@ export const store = createStore({
       return {
         ...context,
         clients: event.clients,
-        webrtcConnections: { ...context.webrtcConnections, ...connections },
+        webRTCConnections: { ...context.webRTCConnections, ...connections },
         chatChannelConnections: {
           ...context.chatChannelConnections,
           ...dataChannelConnecions,
@@ -990,8 +990,8 @@ export const store = createStore({
     setupConnection: (context, event: { peerId: string }) => {
       console.log("Setting up file channel connection...");
       let localPeer;
-      if (context.webrtcConnections[event.peerId]) {
-        localPeer = context.webrtcConnections[event.peerId];
+      if (context.webRTCConnections[event.peerId]) {
+        localPeer = context.webRTCConnections[event.peerId];
       } else {
         return context;
       }

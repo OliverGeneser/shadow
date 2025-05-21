@@ -1,4 +1,4 @@
-import { Message } from "../stores/connection-store";
+import { Message } from "../store";
 
 export class FIFOQueue {
   private queue: Message[] = [];

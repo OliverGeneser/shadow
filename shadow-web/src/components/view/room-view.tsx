@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { v4 as uuidv4, validate as uuidValidate } from "uuid";
-import { store } from "./stores/connection-store";
-import { Chat } from "./components/UI/chat";
-import { UserNetwork } from "./components/UI/userNetwork";
-import { button } from "./components/UI/button";
-import ShareButton from "./components/UI/share";
+import { store } from "../../store";
+import { Chat } from "../../components/UI/chat";
+import { UserNetwork } from "../../components/UI/userNetwork";
+import { button } from "../../components/UI/button";
+import ShareButton from "../../components/UI/share";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faComments } from "@fortawesome/free-solid-svg-icons";
 

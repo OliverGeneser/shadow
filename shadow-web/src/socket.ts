@@ -1,5 +1,5 @@
-import { ClientsData, SignalAnswerData, WSResponse } from "shadow-shared";
-import { store } from "./stores/connection-store";
+import { SignalAnswerData, WSResponse } from "shadow-shared";
+import { store } from "./store";
 
 const serverUrl = "wss://" + import.meta.env.VITE_WEBSOCKET_URL;
 const websocket = new WebSocket(serverUrl);
@@ -32,12 +32,12 @@ websocket.onmessage = async (event) => {
         break;
       }
       case "offer": {
-        const webrtcConnections = store
-          .select((state) => state.webrtcConnections)
+        const webRTCConnections = store
+          .select((state) => state.webRTCConnections)
           .get();
         let localPeer;
-        if (webrtcConnections[msg.from]) {
-          localPeer = webrtcConnections[msg.from];
+        if (webRTCConnections[msg.from]) {
+          localPeer = webRTCConnections[msg.from];
         } else {
           throw new Error("THERE is no WEBRTC CONNECTION for offer");
         }
@@ -60,12 +60,12 @@ websocket.onmessage = async (event) => {
         break;
       }
       case "answer": {
-        const webrtcConnections = store
-          .select((state) => state.webrtcConnections)
+        const webRTCConnections = store
+          .select((state) => state.webRTCConnections)
           .get();
         let localPeer;
-        if (webrtcConnections[msg.from]) {
-          localPeer = webrtcConnections[msg.from];
+        if (webRTCConnections[msg.from]) {
+          localPeer = webRTCConnections[msg.from];
         } else {
           break;
         }
@@ -81,13 +81,13 @@ websocket.onmessage = async (event) => {
       }
 
       case "candidate": {
-        const webrtcConnections = store
-          .select((state) => state.webrtcConnections)
+        const webRTCConnections = store
+          .select((state) => state.webRTCConnections)
           .get();
 
         let localPeer;
-        if (webrtcConnections[msg.from]) {
-          localPeer = webrtcConnections[msg.from];
+        if (webRTCConnections[msg.from]) {
+          localPeer = webRTCConnections[msg.from];
         } else {
           break;
         }

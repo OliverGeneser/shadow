@@ -1,11 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Textarea } from "./textarea";
 import { button } from "./button";
-import {
-  store,
-  useChatMessages,
-  useClientId,
-} from "../../stores/connection-store";
+import { store, useChatMessages, useClientId } from "../../store";
 
 export function Chat() {
   const chatMessages = useChatMessages();

@@ -7,7 +7,7 @@ import {
   useClients,
   useFiles,
   useSendersAwaitingApproval,
-} from "../../stores/connection-store";
+} from "../../store";
 import { Client, colorMap } from "shadow-shared";
 import Modal from "./modal";
 
@@ -70,8 +70,6 @@ export function UserNetwork() {
 
   useEffect(() => {
     if (!clientId) return;
-
-    console.log("Chganinh");
 
     setGraphData((prevData) => {
       const prevNodesMap = new Map(
