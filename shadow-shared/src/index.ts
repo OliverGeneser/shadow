@@ -74,6 +74,22 @@ export type SignalAnswerData = z.infer<typeof signalAnswerDataSchema>;
 
 export type SignalCandidateData = z.infer<typeof signalCandidateDataSchema>;
 
+export const clientSchema = z
+  .object({
+    clientId: z.string(),
+    publicKey: z.custom<JsonWebKey>().optional(),
+  })
+  .strict();
+
+export const clientsSchema = z.array(
+  z
+    .object({
+      clientId: z.string(),
+      publicKey: z.custom<JsonWebKey>(),
+    })
+    .strict(),
+);
+
 export const createOrJoinResponse = z
   .object({
     type: z.literal("ready"),
@@ -81,6 +97,7 @@ export const createOrJoinResponse = z
       .object({
         clientId: z.string(),
         roomId: z.string(),
+        clients: clientsSchema,
       })
       .strict(),
   })
@@ -92,31 +109,6 @@ export const leaveResponseSchema = z
     client: z.string(),
   })
   .strict();
-
-export const activitySchema = z
-  .enum(["sending", "receiving", "pending"])
-  .default("pending")
-  .optional();
-
-export const clientSchema = z
-  .object({
-    clientId: z.string(),
-    publicKey: z.custom<JsonWebKey>().optional(),
-    activity: activitySchema,
-    progress: z.number().optional(),
-  })
-  .strict();
-
-export const clientsSchema = z.array(
-  z
-    .object({
-      clientId: z.string(),
-      publicKey: z.custom<JsonWebKey>(),
-      activity: activitySchema,
-      progress: z.number().optional(),
-    })
-    .strict(),
-);
 
 export const clientsResponseSchema = z
   .object({
@@ -170,8 +162,6 @@ export type CreateOrJoinResponse = z.infer<typeof createOrJoinResponse>;
 export type LeaveResponse = z.infer<typeof leaveResponseSchema>;
 
 export type ClientsResponse = z.infer<typeof clientsResponseSchema>;
-
-export type activity = z.infer<typeof activitySchema>;
 
 export type Client = z.infer<typeof clientSchema>;
 

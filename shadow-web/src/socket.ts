@@ -19,7 +19,6 @@ websocket.onopen = () => {
 websocket.onmessage = async (event) => {
   try {
     const msg = WSResponse.parse(JSON.parse(event.data));
-    console.log(msg);
 
     switch (msg.type) {
       case "ready": {

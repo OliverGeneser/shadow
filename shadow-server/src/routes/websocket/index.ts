@@ -110,14 +110,25 @@ const handleRoom = (ws: WebSocket.WebSocket, data: RoomData) => {
   const metadata = { clientId, roomId, publicKey: data.publicKey };
   wsMetadata.set(ws, metadata);
 
+  let clientsInformation: ClientsInformation | undefined;
   if (clients.size > 1) {
-    const clientsInformation = getClientInformationOfAllClients(clients);
+    clientsInformation = getClientInformationOfAllClients(clients);
     sendClientIdsToAllClients(clients, ws, clientsInformation);
   }
 
   const parsed = createOrJoinResponse.parse({
     type: "ready",
-    metadata: { clientId: metadata.clientId, roomId: metadata.roomId },
+    metadata: {
+      clientId: metadata.clientId,
+      roomId: metadata.roomId,
+      clients: clientsInformation
+        ? clientsInformation
+            .filter((ci) => ci.ws !== ws)
+            .map((ci) => {
+              return { clientId: ci.clientId, publicKey: ci.publicKey };
+            })
+        : [],
+    },
   });
   ws.send(JSON.stringify(parsed));
 };
@@ -258,13 +269,13 @@ const getClientInformationOfAllClients = (clients: Room) => {
 const sendClientIdsToAllClients = (
   clients: Room,
   ws: WebSocket.WebSocket,
-  clientsInfromation: ClientsInformation,
+  clientsInformation: ClientsInformation,
 ) => {
   clients.forEach((client) => {
     if (client !== ws) {
       const message = {
         type: "clients",
-        clients: clientsInfromation
+        clients: clientsInformation
           .filter((ci) => ci.ws !== client)
           .map((ci) => {
             return { clientId: ci.clientId, publicKey: ci.publicKey };

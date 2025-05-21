@@ -11,7 +11,7 @@ import {
 import { Client, colorMap } from "shadow-shared";
 import Modal from "./modal";
 
-type link = {
+type Link = {
   source: string;
   target: string;
 };
@@ -29,7 +29,7 @@ export function UserNetwork() {
   const [selectedNode, setSelectedNode] = useState<Client>();
   const [graphData, setGraphData] = useState<{
     nodes: Client[];
-    links: link[];
+    links: Link[];
   }>();
 
   const clients = useClients();
@@ -71,27 +71,8 @@ export function UserNetwork() {
   useEffect(() => {
     if (!clientId) return;
 
-    setGraphData((prevData) => {
-      const prevNodesMap = new Map(
-        (prevData?.nodes ?? []).map((n) => [n.clientId, n]),
-      );
-
+    setGraphData(() => {
       const allClients: Client[] = [{ clientId: clientId }, ...(clients ?? [])];
-
-      const nodes = allClients.map((c) => {
-        const existing = prevNodesMap.get(c.clientId);
-        if (!existing) return { ...c };
-
-        const updated: Client = { ...existing };
-        if (c.activity !== existing.activity) {
-          updated.activity = c.activity;
-        }
-        if (c.progress !== existing.progress) {
-          updated.progress = c.progress;
-        }
-
-        return updated;
-      });
 
       const links =
         clients?.map((c) => ({
@@ -99,7 +80,7 @@ export function UserNetwork() {
           target: c.clientId,
         })) ?? [];
 
-      return { nodes, links };
+      return { nodes: allClients, links };
     });
   }, [clients, clientId]);
 
