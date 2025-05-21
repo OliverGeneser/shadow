@@ -101,7 +101,7 @@ const messageProcessing = async (message: Message): Promise<void> => {
 
   const packetType = messageArray[0];
 
-  if (packetType === 1) {
+  if (packetType === 0b00000001) {
     try {
       if (receiveFile.data) {
         const publicKey = await window.crypto.subtle.importKey(
@@ -142,7 +142,7 @@ const messageProcessing = async (message: Message): Promise<void> => {
       console.log(e);
       return;
     }
-  } else if (packetType === 2) {
+  } else if (packetType === 0b00000000) {
     const sendersAwaitingApproval = store
       .select((state) => state.sendersAwaitingApproval)
       .get();
@@ -209,7 +209,7 @@ const messageProcessing = async (message: Message): Promise<void> => {
         }
       }
     }
-  } else if (packetType === 3) {
+  } else if (packetType === 0b00000010) {
     if (receiveFile.data) {
       const publicKey = await window.crypto.subtle.importKey(
         "jwk",
@@ -250,7 +250,7 @@ const messageProcessing = async (message: Message): Promise<void> => {
       }
     }
   } else {
-    console.log("Unknown packetType");
+    console.log("Unknown packetType:", packetType);
   }
 };
 
@@ -265,7 +265,7 @@ const chatMessageProcessing = async (message: Message): Promise<void> => {
 
   const packetType = messageArray[0];
 
-  if (packetType === 2) {
+  if (packetType === 0b00000000) {
     try {
       const publicKey = await window.crypto.subtle.importKey(
         "jwk",
@@ -603,7 +603,7 @@ export const store = createStore({
           throw new Error("Failed to encrypt!!!");
         }
 
-        const packetType = new Uint8Array([3]);
+        const packetType = new Uint8Array([2]);
         const encrypted = new Uint8Array(encryptedChunk);
         const data = new Uint8Array(
           packetType.length + initializationVector.length + encrypted.length,
@@ -862,7 +862,7 @@ export const store = createStore({
                       throw new Error("Failed to encrypt!!!");
                     }
 
-                    const packetType = new Uint8Array([2]);
+                    const packetType = new Uint8Array([0]);
 
                     const encrypted = new Uint8Array(encryptedChunk);
                     const data = new Uint8Array(
@@ -964,7 +964,7 @@ export const store = createStore({
               throw new Error("Failed to encrypt!!!");
             }
 
-            const packetType = new Uint8Array([2]);
+            const packetType = new Uint8Array([0]);
 
             const encrypted = new Uint8Array(encryptedChunk);
             const data = new Uint8Array(
