@@ -748,7 +748,7 @@ export const store = createStore({
       }
 
       enqueue.effect(async () => {
-        const maxChunkSize = 16000; //;
+        const maxChunkSize = 16000;
 
         const client = context.clients.find(
           (client) => client.clientId === event.peerId,
