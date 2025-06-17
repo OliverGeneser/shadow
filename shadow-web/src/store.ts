@@ -235,8 +235,8 @@ export const store = createStore({
 
       if (fileChannels[event.peerId]) {
         fileChannels[event.peerId].close();
-        messageQueue.clear(event.peerId);
       }
+      messageQueue.clear(event.peerId);
 
       return resetFileTransfer(context, event.peerId);
     },
